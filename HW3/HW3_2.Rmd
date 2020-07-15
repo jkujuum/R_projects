@@ -1,0 +1,313 @@
+---
+title: "HW3_2"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.height=4, fig.width=6, warning = F)
+
+# constants for homework assignments
+hw_num <- 3
+hw_due_date <- "17, March, 2019"
+
+
+
+pacman::p_load(tidyverse, nycflights13, gapminder, ggthemes, data.table, ISLR, leaps, car, GGally, reshape2, glmnet, mapproj, bestglm, pROC, caret)
+```
+
+
+
+## Problem 2
+
+How well can we predict whether a bill will be passed by the legislature? 
+
+Hundreds to thousands of bills are written each year in Pennsylvania. Some are long, others are short. Most of the bills do not even get to be voted on (“sent to the floor”). The chamber meets for 2-year sessions.  Bills that are not voted on before the end of the session (or which are voted on but lose the vote) are declared dead. Most bills die. In this study we examine about 8000 bills proposed since 2009, with the goal of building a classifier which has decent power to forecast which bills are likely to be passed. 
+
+We have available some information about 8011 bills pertaining to legislation introduced into the Pennsylvania House of Representatives.  The goal is to predict which proposals will pass the House. Here is some information about the data:
+
+The response is the variable called `status.` `Bill:passed` means that the bill passed the House; `governor:signed` means that the bill passed both chambers (including the House) and was enacted into law; `governor:received` means that the bill has passed both chambers and was placed before the governor for consideration.  All three of these statuses signify a success or a PASS (Meaning that the legislature passed the bill. This does not require it becoming law). All other outcomes are failures.
+
+Here are the rest of the columns:
+
+*	`Session` – in which legislative session was the bill introduced
+*	`Sponsor_party` – the party of the legislator who sponsored the bill (every bill has a sponsor)
+*	`Bill_id` – of the form HB-[bill number]-[session], e.g., `HB-2661-2013-2014` for the 2661st House Bill introduced in the 2013-2014 session.
+*	`Num_cosponsors` – how many legislators cosponsored the bill
+*	`Num_d_cosponsors` – how many Democrats cosponsored the bill
+*	`Num_r_cosponsors` – how many Republicans cosponsored the bill
+*	`Title_word_count` – how many words are in the bill’s title
+*	`Originating_committee` – most bills are sent (“referred”) to a committee of jurisdiction (like the transportation committee, banking & insurance committee, agriculture & rural affairs committee) where they are discussed and amended.  The originating committee is the committee to which a bill is referred.
+*	`Day_of_week_introduced` – on what day the bill was introduced in the House (1 is Monday)
+*	`Num_amendments` – how many amendments the bill has
+*	`Is_sponsor_in_leadership` – does the sponsor of the bill hold a position inside the House (such as speaker, majority leader, etc.)
+*	`num_originating_committee_cosponsors` – how many cosponsors sit on the committee to which the bill is referred
+*	`num_originating_committee_cosponsors_r` – how many Republican cosponsors sit on the committee to which the bill is referred
+*	`num_originating_committee_cosponsors_d` - how many Democratic cosponsors sit on the committee to which the bill is referred
+
+The data you can use to build the classifier is called `Bills.subset`. It contains 7011 records from the full data set. I took a random sample of 1000 bills from the 2013-2014 session as testing data set in order to test the quality of your classifier, it is called `Bills.subset.test.`
+
+Your job is to choose a best set of classifiers such that
+
+* The testing ROC curve pushes to the upper left corner the most, and has a competitive AUC value.
+* Propose a reasonable loss function, and report the Bayes rule together with its weighted MIC. 
+* You may also create some sensible variables based on the predictors or make other transformations to improve the performance of your classifier.
+
+Here is what you need to report: 
+
+1. Write a summary about the goal of the project. Give some background information. If desired, you may go online to find out more information.
+2. Give a preliminary summary of the data. 
+3. Based on the data available to you, you need to build a classifier. Provide the following information:
+    *	The process of building your classifier
+    *	Methods explored, and why you chose your final model
+    *	Did you use a training and test set to build your classifier using the training data? If so, describe the process including information about the size of your training and test sets.
+    *	What is the criterion being used to build your classifier?
+    *	How do you estimate the quality of your classifier?
+4. Suggestions you may have: what important features should have been collected which would have helped us to improve the quality of the classifiers.
+
+*Final notes*: The data is graciously lent from a friend. It is only meant for you to use in this class. All other uses are prohibited without permission. 
+
+
+1. Write a summary about the goal of the project. Give some background information. If desired, you may go online to find out more information.
+
+
+The goal of this project is to predict whether a proposal will pass the House and al so understand what factors would affect the chance of a bill beging passed. Given information like sponsor-paty, session, and which comitte did the bill originate from and been sponsored, we will build a classifier using the training data, then test the performance using testing data. Our model is used for assess the likelihood that a bill will be passed, and this act will be very useful for teams who propose the bill. 
+
+
+
+
+
+Give a preliminary summary of the data. 
+```{r}
+bill_data <- read.csv("Bills.subset.csv")
+bill_data_test <-read.csv("Bills.subset.test.csv")
+```
+
+
+```{r}
+dim(bill_data)
+str(bill_data)
+```
+```{r}
+dim(bill_data_test)
+```
+
+```{r}
+summary(bill_data)
+```
+
+```{r}
+sapply(bill_data, function(x) sum(is.na(x)))  #find out missing values in training data
+```
+```{r}
+sapply(bill_data_test, function(x) sum(is.na(x)))
+```
+
+```{r}
+#replace all missing day of week with random number from 1 to 6 (Mon to Sat)
+set.seed(23)
+bill_data[is.na(bill_data[,"day.of.week.introduced"]),"day.of.week.introduced"] <- sample(1:6,1)  
+bill_data_test[is.na(bill_data_test[,"day.of.week.introduced"]),"day.of.week.introduced"] <- sample(1:6,1)  
+
+```
+
+
+
+
+```{r}
+#deselect unrelevant column "bill_id"
+bill_data <- bill_data[,-1] 
+bill_data_test <- bill_data_test[,-1]
+```
+
+```{r}
+dim(bill_data)
+dim(bill_data_test)
+```
+
+```{r}
+# We create a column to identify 3 status "bill:passed", "governor:signed", "governor:received", and differ from other status
+bill_data <- bill_data %>% mutate(passed = status %in% c("bill:passed", "governor:signed", "governor:received"))
+bill_data_test <- bill_data_test %>% mutate(passed = status %in% c("bill:passed", "governor:signed", "governor:received"))
+```
+
+```{r}
+str(bill_data_test)
+```
+
+
+
+```{r}
+#turn categorical data into factors
+bill_data$passed <- as.factor(as.numeric(bill_data$passed))
+bill_data$is_sponsor_in_leadership = as.factor(bill_data$is_sponsor_in_leadership)
+bill_data$session <- as.factor(bill_data$session)
+bill_data$sponsor_party <- as.factor(bill_data$sponsor_party)
+bill_data$originating_committee <- as.factor(bill_data$originating_committee)
+bill_data$day.of.week.introduced <- as.factor(bill_data$day.of.week.introduced)
+
+
+bill_data_test$passed <- as.factor(as.numeric(bill_data_test$passed))
+bill_data_test$is_sponsor_in_leadership = as.factor(bill_data_test$is_sponsor_in_leadership)
+bill_data_test$session <- as.factor(bill_data_test$session)
+bill_data_test$sponsor_party <- as.factor(bill_data_test$sponsor_party)
+bill_data_test$originating_committee <- as.factor(bill_data_test$originating_committee)
+bill_data_test$day.of.week.introduced <- as.factor(bill_data_test$day.of.week.introduced)
+
+
+```
+
+```{r}
+summary(bill_data)
+```
+
+####Create additional sensible variables
+However, it seems that there should be data points to represent bi-partisan support of a bill. We therefore make two dummy variables; one for for the oringinating committee co-sponsors and the other for regular cosponsors when both the democrats and republics have values greater than 0. 
+```{r}
+#Creating bi-partisan variables for the training data
+bill_data$bipartisanOrigination <- 0
+bill_data$bipartisanOrigination[bill_data$num_originating_committee_cosponsors_r>0 & bill_data$num_originating_committee_cosponsors_d>0] <- 1
+bill_data$bipartisanOrigination <- as.factor(bill_data$bipartisanOrigination)
+
+bill_data$bipartisanSponsors <- 0
+bill_data$bipartisanSponsors[bill_data$num_d_cosponsors>0 & bill_data$num_r_cosponsors>0] <- 1
+bill_data$bipartisanSponsors <- as.factor(bill_data$bipartisanSponsors)
+#Just to check the variable assignments  - everything seems ok
+xx <- bill_data %>% select(num_originating_committee_cosponsors_r, num_originating_committee_cosponsors_d, bipartisanOrigination) %>% distinct() %>% arrange(bipartisanOrigination, num_originating_committee_cosponsors_d, num_originating_committee_cosponsors_r)
+head(xx)
+zz<- bill_data %>% select(bipartisanSponsors, num_d_cosponsors, num_r_cosponsors) %>% distinct() %>% arrange(bipartisanSponsors, num_d_cosponsors, num_r_cosponsors)
+head(zz)
+
+#Creating bi-partisan variables for the testing data
+bill_data_test$bipartisanOrigination <- 0
+bill_data_test$bipartisanOrigination[bill_data_test$num_originating_committee_cosponsors_r>0 & bill_data_test$num_originating_committee_cosponsors_d>0] <- 1
+bill_data_test$bipartisanOrigination <- as.factor(bill_data_test$bipartisanOrigination)
+
+bill_data_test$bipartisanSponsors <- 0
+bill_data_test$bipartisanSponsors[bill_data_test$num_d_cosponsors>0 & bill_data_test$num_r_cosponsors>0] <- 1
+bill_data_test$bipartisanSponsors <- as.factor(bill_data_test$bipartisanSponsors)
+```
+
+
+We build a ggpairs plot with the resulting training data set to spot trends; the color represents passed vs. not passed. We will build pivot tables on a few of the variables which seem to show some trends. 
+```{r}
+bills.ggpairs <-  bill_data %>% select(-originating_committee)
+ggpairs(bills.ggpairs, mapping = aes(colour = passed))
+```
+
+Here, we see that republican sponsored bills seem more likely to pass than democrat sponsored ones, and much more likely than bills whose sponsor_party values were null. 
+```{r}
+table1 <- dcast(bill_data, sponsor_party~ passed)
+table1$PercentPassed <- table1[,3]/ (table1[,2] + table1[,3])
+table1
+```
+
+Here, we see that bills were much less likely to pass in 2009-2010 or in the special session in 2009-2010 than in the 2011-2012 or 2013-2014 sessions. 
+```{r}
+table1 <- dcast(bill_data, session~ passed)
+table1$PercentPassed <- table1[,3]/ (table1[,2] + table1[,3])
+table1
+```
+
+Here, we see that the passing rate of different originating committees varies substantially. 
+```{r}
+table1 <- dcast(bill_data, originating_committee~ passed)
+table1$PercentPassed <- table1[,3]/ (table1[,2] + table1[,3])
+table1 %>% arrange( desc(PercentPassed))
+```
+
+This table shows that the passing rate of bills without bipartisan sponsors is actually lower than when there are not bipartisan sponsors. This could be because people only search out bipartisan sponsorship for bills they know are particularly controversial. 
+```{r}
+table1 <- dcast(bill_data, bipartisanSponsors~ passed)
+table1$PercentPassed <- table1[,3]/ (table1[,2] + table1[,3])
+table1 %>% arrange( desc(PercentPassed))
+```
+
+
+
+This table shows that when the sponsor is in leadership, the bills are slightly more likely to pass. 
+```{r}
+table1 <- dcast(bill_data, is_sponsor_in_leadership~ passed)
+table1$PercentPassed <- table1[,3]/ (table1[,2] + table1[,3])
+table1 %>% arrange( desc(PercentPassed))
+```
+
+
+
+
+Building the classifiers
+
+Backward elimination
+- We exclude the status column, as this would be a perfect predictor of the 'passed' column, but not help us predict new bills. 
+- We exclude num_r_cosponsors and num_originating_committee_cosponsors_r, since we have the values for the total support and the democrat support; having all three variables is redundant. 
+```{r}
+bill_data_training <- bill_data %>% select(-status, -num_r_cosponsors, -num_originating_committee_cosponsors_r)
+```
+
+
+```{r}
+fit1 <- glm(passed~.,data = bill_data_training , family=binomial(logit))
+summary(fit1)
+Anova(fit1)
+
+```
+
+```{r}
+fit1.1 <- update(fit1,.~.-num_originating_committee_cosponsors_d)
+summary(fit1.1)
+Anova(fit1.1)
+
+```
+
+```{r}
+fit1.2 <- update(fit1.1,.~.-num_cosponsors )
+summary(fit1.2)
+Anova(fit1.2)
+
+```
+
+
+```{r}
+fit1.3 <- update(fit1.2,.~.-bipartisanOrigination )
+summary(fit1.3)
+Anova(fit1.3)
+
+```
+
+```{r}
+fit1.4 <- update(fit1.3,.~.-day.of.week.introduced)
+summary(fit1.4)
+Anova(fit1.4)
+```
+
+```{r}
+fit1.5 <- update(fit1.4,.~.-is_sponsor_in_leadership)
+summary(fit1.5)
+Anova(fit1.5)
+```
+
+
+```{r}
+fit1.6 <- update(fit1.5,.~.-num_originating_committee_cosponsors)
+summary(fit1.6)
+Anova(fit1.6)
+```
+
+Fit1.6 is the backward selection model
+```{r}
+summary(fit1.6)
+```
+
+BestGLM method
+
+Suggestions for additional features:
+- The topic of the bill (education bill may have higher pass rate than environment), and The total number of proposals under this topic
+- Month of the year (Some bill may have seasonality, or bill may have higher pass rate than end of the year)
+- Similiar bills been proposaed in other states may affect its pass rate
+
+
+
+
+
+
+
