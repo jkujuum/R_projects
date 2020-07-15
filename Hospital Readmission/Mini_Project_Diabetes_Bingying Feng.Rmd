@@ -1,0 +1,439 @@
+---
+title: "Predicting readmission probability for diabetes inpatients"
+author: "STAT 471/571/701 Modern Data Mining"
+date: "Due midnight, April 7th, 2019"
+output:
+  word_document:
+    toc: yes
+    toc_depth: '4'
+  pdf_document:
+    toc: yes
+    toc_depth: '4'
+  html_document:
+    code_folding: show
+    highlight: haddock
+    theme: lumen
+    toc: yes
+    toc_depth: 4
+    toc_float: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.width = 7, fig.height = 4)
+if(!require("pacman")) install.packages("pacman")
+pacman::p_load(dplyr, ggplot2, glmnet, car, data.table, randomForest, tree,  ISLR, rpart, rattle, pROC, partykit)   #add your packages here
+```
+
+
+#  Executive Summary
+
+## Background
+Hospital readmission is very expensive and it is an emerging indicator of quality of health care. On average, Medicare spends double the amount for an episode with one readmission. Moreover, diabetes is a chronic medical condition affecting millions of Americans, but if managed well, with good diet, exercise and medication, patients can lead relatively normal lives. However, if improperly managed, diabetes can lead to patients being continuously admitted and readmitted to hospitals. Readmissions are especially serious - they represent a failure of the health system to provide adequate support to the patient and are extremely costly to the system. As a result, the Centers for Medicare and Medicaid Services announced in 2012 that they would no longer reimburse hospitals for services rendered if a patient was readmitted with complications within 30 days of discharge.
+
+Given these policy changes, being able to identify and predict those patients most at risk for costly readmissions has become a pressing priority for hospital administrators. In this project, we shall explore how to use the techniques we have learned in order to help better manage diabetes patients who have been admitted to a hospital. Our goal is to avoid patients being readmitted within 30 days of discharge, which reduces costs for the hospital and improves outcomes for patients. If we could identify important factors relating to the chance of a patient being readmitted within 30 days of discharge, effective intervention could be done to reduce the chance of being readmitted. Also if we could predict one's chance being readmitted well, actions can be taken. 
+
+## The data
+
+The original data is from the [Center for Clinical and Translational Research](https://archive.ics.uci.edu/ml/datasets/Diabetes+130-US+hospitals+for+years+1999-2008) at Virginia Commonwealth University. It covers data on diabetes patients across 130 U.S. hospitals from 1999 to 2008. There are over 100,000 unique hospital admissions in this dataset, from ~70,000 unique patients. The data includes demographic elements, such as age, gender, and race, as well as clinical attributes such as tests conducted, emergency/inpatient visits, etc. Refer to the original documentation for more details on the dataset. Three former students Spencer Luster, Matthew Lesser and Mridul Ganesh, brought this data set into the class and did a wonderful final project. We will use a subset processed by the group but with a somewhat different objective.
+
+All observations have five things in common:
+
+1.	They are all hospital admissions
+2.	Each patient had some form of diabetes
+3.	The patient stayed for between 1 and 14 days.
+4.	The patient had laboratory tests performed on him/her.
+5.	The patient was given some form of medication during the visit.
+
+The data was collected during a ten-year period from 1999 to 2008. There are over 100,000 unique hospital admissions in the data set, with ~70,000 unique patients. 
+
+
+## Methods used
+
+In order to analyse data, I first cleaned the data and deleted unecessary variables.Then I label readmission into "1" as "Yes, readmitted within 30 days" and "0" as "No". Then, we did exploratory data analysis to have an overview of the data. 
+
+The data is seperated into two sets. One set is used and trained to generate models, while the other set of data is used to test the model and see if the model fit the data well. In order to find posible factors that are related to readmission, I used two method to build 2 models. The first model is Lasso model, and the second one is backward selection model.We weighted the cost of mislabel a readmission to be twice as much as mislabel a non-readmission  We compared the two models based on their prediction error and ROC curve.  
+
+The final model contains 7 variables:
+1. number_inpatient (Number of inpatient visits by the patient in the year prior to the current encounter) 
+2. number_diagnoses (Total no. of diagnosis entered for the patient)
+3. insulin
+4. diabetesMed (Indicates if any diabetes medication was prescribed)
+5. disch_disp_modified
+6. diag1_mod (ICD9 codes for the primary diagnoses of the patient.)
+7. diag3_mod (ICD9 codes for the tertiary diagnoses of the patient.)
+
+
+## Limitation
+
+Readmission is not only related to factors inside of the hospital. In our model, we only related the readmission rate to patient himself/herself or factors in hospital. However, whether or not a patient is readmitted may be very related to factors outside of the hospital. Do patients receive good care after leaving the hospital; did they taking medicine on time; and their excercise frequency and emotional mood can also be a potential factors to patients readmission rate. 
+
+
+# Data Analysis
+
+## (i) Data Summary 
+
+### Description of variables
+
+The dataset used covers ~50 different variables to describe every hospital diabetes admission. In this section we give an overview and brief description of the variables in this dataset.
+
+**1) Patient identifiers:** 
+
+a. `encounter_id`: unique identifier for each admission 
+b. `patient_nbr`: unique identifier for each patient 
+
+**2) Patient Demographics:** 
+
+`race`, `age`, `gender`, `weight` cover the basic demographic information associated with each patient. `Payer_code` is an additional variable that identifies which health insurance (Medicare /Medicaid / Commercial) the patient holds.
+
+**3) Admission and discharge details:** 
+
+a.	`admission_source_id` and `admission_type_id` identify who referred the patient to the hospital (e.g. physician vs. emergency dept.) and what type of admission this was (Emergency vs. Elective vs. Urgent). 
+b.	`discharge_disposition_id` indicates where the patient was discharged to after treatment.
+
+**4) Patient Medical History:**
+
+a.	`num_outpatient`: number of outpatient visits by the patient in the year prior to the current encounter
+b.	`num_inpatient`: number of inpatient visits by the patient in the year prior to the current encounter
+c.	`num_emergency`: number of emergency visits by the patient in the year prior to the current encounter
+
+**5)	Patient admission details:**
+
+a.	`medical_specialty`: the specialty of the physician admitting the patient
+b.	`diag_1`, `diag_2`, `diag_3`: ICD9 codes for the primary, secondary and tertiary diagnoses of the patient.  ICD9 are the universal codes that all physicians use to record diagnoses. There are various easy to use tools to lookup what individual codes mean (Wikipedia is pretty decent on its own)
+c.	`time_in_hospital`: the patient’s length of stay in the hospital (in days)
+d.	`number_diagnoses`: Total no. of diagnosis entered for the patient
+e.	`num_lab_procedures`: No. of lab procedures performed in the current encounter
+f.	`num_procedures`: No. of non-lab procedures performed in the current encounter
+g.	`num_medications`: No. of distinct medications prescribed in the current encounter
+
+**6)	Clinical Results:**
+
+a.	`max_glu_serum`: indicates results of the glucose serum test
+b.	`A1Cresult`: indicates results of the A1c test
+
+**7)	Medication Details:**
+
+a.	`diabetesMed`: indicates if any diabetes medication was prescribed 
+b.	`change`: indicates if there was a change in diabetes medication
+c.	`24 medication variables`: indicate whether the dosage of the medicines was changed in any manner during the encounter
+
+**8)	Readmission indicator:** 
+
+Indicates whether a patient was readmitted after a particular admission. There are 3 levels for this variable: "NO" = no readmission, "< 30" = readmission within 30 days and "> 30" = readmission after more than 30 days. The 30 day distinction is of practical importance to hospitals because federal regulations penalize hospitals for an excessive proportion of such readmissions.
+
+### EDA
+
+In our dataset, we have 101766 observations. It covers data on diabetes patients across 130 U.S. hospitals from 1999 to 2008.We have 31 variables but encouter_id and patient_nbr are unrelevent to our model, so we exclude those two. Readmitted as our output variable, we modified it into "1": patient readmit within 30 days, "0", patient does not readmit within 30 days.
+```{r,eval=T,echo=FALSE,results='hide'}
+readmission <- read.csv("readmission.csv")
+dim(readmission)
+str(readmission)
+summary(readmission)
+
+
+#exclude encounter id, patient number. 
+readmission <- readmission %>% 
+  dplyr::select(-encounter_id,-patient_nbr)
+
+# tuen readmission into 1 or 0 factors. 
+readmission$readmitted <- as.character(readmission$readmitted)
+readmission$readmitted[readmission$readmitted =="<30"] <- "1"
+readmission$readmitted[readmission$readmitted ==">30"] <- "0"
+readmission$readmitted[readmission$readmitted =="NO"] <- "0"
+readmission$readmitted <- as.factor(readmission$readmitted)
+str(readmission)
+sum(is.na(readmission))
+```
+
+
+
+From Bar plot in Appendix I, we can see that, more females are readmitted than male, but the probability of readmission is about the same (0.1266991	for female and 0.1243728	for male). 
+
+Among all race, Caucasians and African American are the most likely to readmit, and more Caucasians are readmitted.
+
+There are more 60-79 yrs old people being readmitted. As age goes up, the ratio of readmission goes up.
+
+
+```{r,eval=F,echo=FALSE,results='hide'}
+readmit <- readmission %>% filter(readmitted=="1")
+barplot(table(readmit$gender))
+ratio_gender <- readmission %>% group_by(gender) %>% summarise(ratio=sum(readmitted=="1")/sum(readmitted=="0")) 
+ratio_gender
+```
+
+```{r,eval=F,echo=FALSE,results='hide'}
+barplot(table(readmit$race))
+ratio_race <- readmission %>% group_by(race) %>% summarise(ratio=sum(readmitted=="1")/sum(readmitted=="0")) 
+ratio_race %>% ggplot(aes(x = ratio_race$race, y = ratio_race$ratio)) + 
+   geom_point(size=5) + 
+   xlab("race")+ylab("rate of readmission")
+```
+
+```{r,eval=F,echo=FALSE,results='hide'}
+barplot(table(readmit$age_mod))
+ratio_age <- readmission %>% group_by(age_mod) %>% summarise(ratio=sum(readmitted=="1")/sum(readmitted=="0")) 
+ratio_age %>% ggplot(aes(x = ratio_age$age_mod, y = ratio_age$ratio)) + 
+   geom_point(size=5) + 
+   xlab("age")+ylab("rate of readmission")
+```
+
+
+ In our dataset, we find 2273 "?" in race, here, we consider "?" as mixed race, and we will take "?" into consideration. We also find 3 Unknown/Invalid sex in gender column. We will also take this 3 observations into consideration as representation of transgenders. 
+
+
+Name shown below will be our input, and `readmitted` will be our response variable. 
+```{r,eval=T,echo=FALSE}
+colnames(readmission)
+```
+
+
+
+
+	
+## ii) Analyses
+
+We seperate the data set into 2 subsets. 70% of the data is assigned into training set and the remaining 30% is assigned to testing data set. 
+There are 71236 variables in training set, and 30530 variables in testing set.
+```{r,eval=T,echo=FALSE, results='hide'}
+N <- length(readmission$readmitted)
+set.seed(101)
+index.train <- sample(N,N*0.7)
+data.train <- readmission[index.train,]
+data.test <- readmission[-index.train,]
+dim(data.train)
+dim(data.test)
+```
+
+
+
+### Lasso Model
+The first model we built is a logistic regression with Lasso method. We used cv.glmnet function, and binomial deviance from 10-fold cross validation. We get the following graph. Then we choosed variables of coef.1se, and fit those variables into a logistic regression. 
+
+glm(readmitted~ time_in_hospital + number_inpatient + number_diagnoses
+                 + insulin + diabetesMed + diabetesMed + disch_disp_modified
+                 + diag1_mod + diag3_mod
+                 ,family=binomial, data=data.train)
+                 
+After eliminate variables, and make sure every variables are statistically significant at 0.05 level, we get our lasso model - fit.lasso with 7 variables
+
+```{r,eval=T,echo=FALSE, results='hide'}
+Y <- data.train$readmitted
+X <- model.matrix(readmitted~.,data = data.train)[,-1]
+dim(X)
+```
+
+```{r,eval=T,echo=FALSE}
+set.seed(111)
+fit1 <- cv.glmnet(X, Y, alpha=1, family="binomial", nfolds = 10, type.measure = "deviance") 
+plot(fit1)
+```
+
+
+```{r,eval=T,echo=FALSE, results='hide'}
+coef.1se <- coef(fit1, s="lambda.1se")  
+coef.1se <- coef.1se[which(coef.1se !=0),] 
+rownames(as.matrix(coef.1se)) 
+```
+
+
+```{r,eval=T,echo=FALSE, results='hide'}
+#fit into a logistic regression
+fit2 <- glm(readmitted~ time_in_hospital + number_inpatient + number_diagnoses
+                 + insulin + diabetesMed + diabetesMed + disch_disp_modified
+                 + diag1_mod + diag3_mod
+                 ,family=binomial, data=data.train)
+```
+
+
+
+```{r,eval=T,echo=FALSE, results='hide'}
+summary(fit2)
+Anova(fit2)
+```
+
+
+```{r,eval=T,echo=FALSE, results='hide'}
+#remove time_in_hospital because it is not significant at 0.05 level
+fit2.1 <- update(fit2, .~.-time_in_hospital )
+Anova(fit2.1)
+```
+
+```{r,eval=T,echo=FALSE, results='hide'}
+fit.lasso <- fit2.1 
+summary(fit.lasso)
+Anova(fit.lasso)
+```
+
+
+
+### Backward Selection
+
+The second method we used to build the model is backward selection. Started with the full model, kept one variable with that largest p-value until each variable is significant at 0.05 level. We get our backward selection model - fit.back with 15 variables. 
+```{r,eval=T,echo=FALSE, results='hide'}
+fit3 <- glm(readmitted~.,data.train,family="binomial")
+Anova(fit3)
+
+fit3.1 <- update(fit3,.~.-glyburide)
+Anova(fit3.1)
+
+fit3.2 <- update(fit3.1,.~.-adm_typ_mod)
+Anova(fit3.2)
+
+fit3.3 <- update(fit3.2,.~.-gender)
+Anova(fit3.3)
+
+fit3.4 <- update(fit3.3,.~.-race)
+Anova(fit3.4)
+
+fit3.5 <- update(fit3.4,.~.-number_outpatient)
+Anova(fit3.5)
+
+fit3.6 <- update(fit3.5,.~.-pioglitazone)
+Anova(fit3.6)
+
+fit3.7 <- update(fit3.6,.~.-time_in_hospital)
+Anova(fit3.7)
+
+fit3.8 <- update(fit3.7,.~.-rosiglitazone)
+Anova(fit3.8)
+
+fit3.9 <- update(fit3.8,.~.-glipizide)
+Anova(fit3.9)
+
+fit3.10 <- update(fit3.9,.~.-change)
+Anova(fit3.10)
+
+fit3.11 <- update(fit3.10,.~.-num_lab_procedures)
+Anova(fit3.11)
+
+fit3.12 <- update(fit3.11,.~.-max_glu_serum)
+Anova(fit3.12)
+
+fit3.13 <- update(fit3.12,.~.-glimepiride)
+Anova(fit3.13)
+```
+
+
+
+```{r,eval=T,echo=FALSE, results='hide'}
+fit.back <- fit3.13
+#summary(fit.back)
+Anova(fit.back)
+```
+
+
+### Model Comparision 
+
+We use Bayes Rule to choose a threshold for out model. Based on a quick and somewhat arbitrary guess, we estimate it costs twice as much to mislabel a
+readmission than it does to mislabel a non-readmission.
+
+$a_{01}/a_{10}=1/10=0.5$
+
+$P(Y=1 \vert x) > \frac{\frac{a_{0,1}}{a_{1,0}}}{1 + \frac{a_{0,1}}{a_{1,0}}}$
+
+$P(Y=1 \vert x) > \frac{0.5}{1 + 0.5}=0.33$
+
+Based on calculation, we get out threshold set to be 0.33. 
+After calculation, fit.lasso has a mce of 0.1165084, and fit.back has a mce of 0.1169014. We choose the model with lower mce. Thus, we choose lasso model. 
+```{r,eval=T,echo=FALSE, results='hide'}
+fit.lasso.fitted.test <- predict(fit.lasso, data.test, type="response")
+fitted.lasso <- as.factor(ifelse(fit.lasso.fitted.test > 0.33, "1", "0"))
+mce.lasso <- mean(fitted.lasso != data.test$readmitted)
+
+fit.back.fitted.test <- predict(fit.back, data.test, type="response")
+fitted.back <- as.factor(ifelse(fit.back.fitted.test > 0.33, "1", "0"))
+mce.back <- mean(fitted.back != data.test$readmitted)
+
+data.frame("mce.lasso"=mce.lasso,"mce.back"=mce.back)
+```
+
+
+
+The following graph shows the ROC curve and AUC value for both fit.lasso and fit.back. Two ROC curve looks very similar and we have AUC = 0.65 for both model. So, we still use the lasso model because it has a lower prediction error.
+```{r,eval=T,echo=FALSE}
+par(mfrow=c(1,2))
+fit.lasso.roc <- roc(data.test$readmitted, fit.lasso.fitted.test, plot=T, xlab ="fit.lasso")
+fit.back.roc <- roc(data.test$readmitted, fit.back.fitted.test, plot=T, xlab="fit.back")
+```
+
+```{r,eval=T,echo=FALSE}
+data.frame("AUC(fit.lasso)" = round(auc(fit.lasso.roc),2), "AUC(fit.back)" = round(auc(fit.back.roc),2))
+```
+
+
+
+
+## iii) Conclusion
+
+```{r,eval=T,echo=FALSE, results='hide'}
+summary(fit.lasso)
+```
+
+In conclusion, our final model contains 7 variables.
+
+number_inpatient (Number of inpatient visits by the patient in the year prior to the current encounter): As other variables remain the same, increase in one unit of number_inpatient will result in increase of readmission by 0.258085. The hospital should limit the inpatient visits to reduce the readmission probability.  
+
+number_diagnoses (Total no. of diagnosis entered for the patient): As other variables remain the same, increase in one unit of number_diagnoses will result in increase of readmission by 0.027515. The more disgnosis entered for the patient, the patient is more likely to readmit.
+
+insulin: All insulin level has a negative effect on readmission. Insulin is good for diabetes, so the negative relationship makes sense.
+
+diabetesMed (Indicates if any diabetes medication was prescribed): diabetesMed Yes has a higher positive effect on readmission
+
+disch_disp_modified, All level has positive relationship with readmission.
+
+diag1_mod (ICD9 codes for the primary diagnoses of the patient.): All levels of diag1_mod have positive relationship with readmission 
+
+diag3_mod (ICD9 codes for the tertiary diagnoses of the patient.): Most diad3_mod level have positive relationship with readmission
+
+Beside these variables, I suggest hospitals to pay more attention to patient that are 60 yrs old and above. Based on our bar plot from EDA, we find the probability increases as people getting older, which also makes sense that older people are more vulnerable. We can also have some further analysis on factors outside of the hospital to see if we can find some valuable information. 
+
+ 
+
+## iii) Appendix
+	
+### Readmission vs Gender
+```{r,eval=T,echo=FALSE}
+readmit <- readmission %>% filter(readmitted=="1")
+barplot(table(readmit$gender), main="Readmission vs Gender", ylab="Readmission")
+```
+
+Readmission rate vs gender
+```{r,eval=T,echo=FALSE}
+ratio_gender <- readmission %>% group_by(gender) %>% summarise(ratio=sum(readmitted=="1")/sum(readmitted=="0")) 
+ratio_gender
+```
+
+### Readmission vs Race
+```{r,eval=T,echo=FALSE}
+barplot(table(readmit$race), main= "Readmission vs Race", ylab="Readmission", xlab="Race")
+```
+
+
+```{r,eval=T,echo=FALSE}
+ratio_race <- readmission %>% group_by(race) %>% summarise(ratio=sum(readmitted=="1")/sum(readmitted=="0")) 
+ratio_race %>% ggplot(aes(x = ratio_race$race, y = ratio_race$ratio)) + 
+   geom_point(size=5) + 
+   labs(x="Race",y="Readmission Ratio", title="Readmission Ratio vs Race")
+```
+
+### Readmission vs Age
+
+
+```{r,eval=T,echo=FALSE}
+barplot(table(readmit$age_mod), main= "Readmission vs Age", ylab="Readmission", xlab="Age")
+```
+
+
+```{r}
+ratio_age <- readmission %>% group_by(age_mod) %>% summarise(ratio=sum(readmitted=="1")/sum(readmitted=="0")) 
+ratio_age %>% ggplot(aes(x = ratio_age$age_mod, y = ratio_age$ratio)) + 
+   geom_point(size=5) + 
+   labs(x="Age",y="Readmission Ratio", title="Readmission Ratio vs Age")
+```
+
+
+
+
+# Collaboration
+
+This is an **individual** assignment. We will only allow private Piazza posts for questions. If there are questions that are generally useful, we will release that information.
