@@ -1,0 +1,546 @@
+---
+title: "Midterm"
+author: "STAT 471/571/701 Modern Data Mining"
+date: "03/25/2019"
+output:
+  html_document:
+    code_folding: show
+    highlight: haddock
+    theme: lumen
+    toc: yes
+    toc_depth: 4
+    toc_float: yes
+  pdf_document:
+    toc: yes
+    toc_depth: 4
+  word_document:
+    toc: yes
+    toc_depth: '4'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.width = 7, fig.height = 4)
+if(!require("pacman")) install.packages("pacman")
+pacman::p_load(dplyr, ggplot2, glmnet, car)   #add your packages here
+```
+
+
+\newpage
+
+**Name your submission using the scheme:** 
+
+`LastName_FirstName.pdf` etc. 
+
+**For example:** `Zhao_Linda`  **.rmd**, **.pdf**, **.html** or **.docx**.
+
+Instruction: This exam requires you to use R. It is completely open book/notes. Write your answers using .rmd format and knitr it into one of the html/pdf/docx format. **It looks like the easiest way is to knit it to a .html file!** Show your codes, plots or R-output when
+needed. If you have trouble formatting the plots, don't worry about it. We are not looking for pretty solutions, rather to see if you are able to make sense out of data using R.
+
+Data for Midterm: The data for midterm can be found at:
+
+`/canvas/Files/Midterm/mortality_2012.csv` and `/canvas/Files/Midterm/breast-cancer.csv`.
+
+Midterm Question File can be found at:
+
+`/canvas/Files/Midterm/Miderm03_25_2019.Rmd`.
+
+**Help:** As always skip any part you have trouble with and you may come back to finish it if you have time. Ask one of us for help if you are stuck somewhere for technical issues.
+
+**Electronic Submission:** In the `Assignments` section, go to the `Midterm` assignment and upload your completed files: your `.rmd` file and a compiled file (either a pdf/html/docx). You can upload multiple files. The folder will be closed at **08:10PM**.
+
+If you have trouble to upload your files, email them to `lzhao@wharton.upenn.edu` and `arunku@wharton.upenn.edu`.
+
+\par\noindent\rule{\textwidth}{0.4pt}
+
+**Answering the questions:** For all the questions whenever asked, you answer should show the R code first and then a description of the results to answer the questions. Do not print numbers without context from R code chunk.
+
+**Example:** If you asked to report the mean of `mortality.rate`, then your answer should resemble
+```{r}
+# you need to put the dataset in the same folder where this .rmd file sits.
+data <- read.csv("mortality_2012.csv")
+cat("Mean of the mortality rate is:\n")
+mean(data$mortality.rate)
+```
+or
+```{r}
+mean(data$mortality.rate)
+```
+The mean of the mortality rate is 31.72783.
+
+Do not just write
+```{r}
+mean(data$mortality.rate)
+```
+without any context or sentence answering the question.
+\newpage
+
+
+
+
+## Part I: Mortality rate under age five
+
+According to World Health Organization (WHO), 5.4 million children under age five died in 2017. The risk of a child dying before completing five years of age is still highest in Africa, 8 times compared to that in Europe. In addition, gaps of child mortality between high-income and low-income countries remain large. Reducing these inequalities across countries and saving more child lives by ending preventable child deaths are important priorities of WHO. 
+
+In this exam, we will look into the mortality rate of children under age five of 115 countries around the world in 2012. The goal is to identify important factors associated with children mortality rate and to be able to quantify the relationship.
+
+The data is obtained from DataBank of the World Bank. https://databank.worldbank.org/data/home.aspx. The following R-chunk reads the data `mortality_2012.csv`.
+
+
+```{r read data}
+# you need to put the dataset in the same folder where this .rmd file sits.
+data <- read.csv("mortality_2012.csv")
+```
+
+|Variable|Description|
+|----------------------|--------------------------------|
+| mortality.rate | Mortality rate, under-5 (per 1,000 live births) |
+|Country|Country name|
+|adolescent.fertility.rate | Adolescent fertility rate (births per 1,000 women ages 15-19) |
+| agri.forestry.fish.gdp.pct | Agriculture, forestry, and fishing, value added (% of GDP) |
+| industry.gdp.pct | Industry (including construction), value added (% of GDP) | 
+| CO2 | CO2 emissions (metric tons per capita) |
+| fertility.rate | Fertility rate, total (births per woman) |
+| GDP | GDP (current US$) |
+| GDP.per.capita | GDP per capita (current US$) |
+| gdp.grwoth.rate | GDP growth (annual %) |
+| gni | GNI, PPP (current international $) |
+| inflation | Inflation, GDP deflator (annual %) |
+| LE | Life expectancy at birth, total (years) |
+| population.growth | Population growth (annual %) |
+| population | Population, total |
+| unemployment | Unemployment, total (% of total labor force)) |
+|Continent| Continent|
+|Urban.pop|Percentage of urban population|
+|Household.consump| Household consumption expenditure in million|
+|Forest.area| Percentage of forest|
+|Water| Access to improved water source in percentage|
+|Food.prod.index| Food production index|
+|Arable.land| Arable land per capita|
+|Health.expend| Health expenditure percentage of GDP|
+|Immunization| DPT Immunization percentage of children|
+|Sanitation.faci| Access to improved sanitation facilities in percentage| 
+|Immunization.measles| Measles Immunization percentage of children|
+|Health.exp.pocket| Percentage of out of pocket health expenditure to total health| 
+|Fixed.tel| Fixed telephone subscriptions per 100 people|
+|Mobile.cel| Mobile cellular subscriptions per 100 people|
+|Internet.users| Internet users per 100 people|
+
+
+
+## Question 1: EDA of `data`
+
+### a) Quick Summary
+
+
+```{r}
+summary(data)
+```
+
+
+Report the following information about `data`:
+
+**i)** How many variables and observations does `data` have?
+```{r}
+dim(data)
+```
+There are 115 observations and 30 variables
+
+
+
+**ii)** Are there any missing values?
+```{r}
+sum(is.na(data))
+```
+No, there is no missing value in the dataset. 
+
+
+
+
+### b) `mortality.rate`  in 2012
+
+**i)** Which country has the highest `mortality.rate`? And which country has the lowest `mortality.rate`? What are the mean and median `mortality.rate` among all countries in data? 
+
+```{r}
+data %>% group_by(Country) %>% dplyr::select(mortality.rate) %>% arrange(mortality.rate)
+```
+Central African Republic has the highest mortality rate and Iceland has the lowest
+
+```{r}
+mean(data[,"mortality.rate"])
+median(data[,"mortality.rate"])
+```
+The mean mortality rate is 31.73 and the median is 16.8
+
+
+**ii)** Make a histogram of the `mortality.rate`. Use no more than three sentences to describe the distribution of the `mortality.rate`.  (Does it look normal? Are there more countries with low `mortality.rate` or more countries with high `mortality.rate`?)
+```{r}
+hist(data$mortality.rate)
+```
+The histogram is not normal, it has a long tail to the right. From the histogram, we see there is a high frequency of fortality below than 25, so there are more countries with low mortality rate
+
+
+**iii)**  Report the mean and median `mortality.rate` by `Continent`. Which `Continent` has the highest mean `mortality.rate` and what is the value? 
+```{r}
+data %>% group_by(Continent) %>% summarize(mean_mortality= mean(mortality.rate)) %>% arrange(mean_mortality)
+```
+Africa has the highest mortality rate (75.38)
+
+
+**iv)** Show the boxplots of `mortality.rate` versus `Continent`. Write a brief summary based on these boxplots. No more than three sentences please. 
+```{r}
+data %>% ggplot(aes(x = Continent, y = mortality.rate)) + 
+  geom_boxplot() + 
+  theme(axis.text.x = element_text(angle = 30, hjust = 1))
+```
+From the box plot, we can see Africa and Asia have relatively high mortality rate and Africa has a longer range of mortality rate. Oceania and Europe has the lowest mortality rate. 
+
+
+
+
+
+
+
+## Question 2: Relation between mortality.rate and other variables
+
+### a) Single most usueful factor
+
+```{r}
+cor.mat <- data %>% select(-Country, -Continent) %>% cor  
+cor.mat[1,]
+```
+
+**i)** What does `cor.mat` contain? And what does `cor.mat[1,]` show?
+
+ cor() isused to compute a correlation matrix, cor.mat[1,] Showes row names ( mortality.rate for the correlation test)
+
+**ii)** Based on the above correlation matrix, which single continuous variable will have the highest $R^2$ if we fit `mortality.rate` vs one variable at a time and why? **We only take the answer based on the above R-chunk! No need to do all the simple linear regressions.**
+
+fertility.rate  because it has the highest absolute correlation
+
+
+
+### b) `mortality.rate` vs. `GDP` 
+
+**i)** Fit a linear model of `mortality.rate` vs. GDP. Make a scatter plot of GDP vs. `mortality.rate`, together with the regression line overlayed.
+Report the lm summary statistics. Is GDP a significant variable at .01 level?
+
+```{r}
+fit1 <- lm(mortality.rate~GDP, data)
+summary(fit1)
+```
+
+
+```{r}
+data %>%
+    ggplot(aes(x = GDP, y= mortality.rate)) + geom_point() +
+    geom_abline(slope = -3.573e-12, intercept = 3.376e+01) + 
+    xlab("GDP") + ylab("mortality.rate") + 
+    theme_bw()
+```
+
+
+**ii)** Fit a linear model of `mortality.rate` vs. log(GDP). Here we use natural log. Make another scatter plot of log(GDP) vs. `mortality.rate` together with the regression liner. Report the lm summary statistics. Is the GDP in log scale significant at .01 level?
+
+```{r}
+fit1.1 <- lm(mortality.rate~log(GDP), data)
+summary(fit1.1)
+```
+```{r}
+data %>%
+    ggplot(aes(x = log(GDP), y= mortality.rate)) + geom_point() +
+    geom_abline(slope = -9.032  , intercept = 257.941) + 
+    xlab("GDP") + ylab("mortality.rate") + 
+    theme_bw()
+```
+
+
+
+
+**iii)** Which is a better model choice? And why? No more than three sentences. 
+
+The mortality.rate vs. log(GDP) is better.
+The scatter plot of mortality.rate vs. GDP shows the relationship between the two is clearly nonlinear
+
+
+**iv)** Use your model in **ii)** regardless your answer in **iii)** and write your findings briefly (no more than 3 lines) summarizing the relationship between GDP and `mortality.rate`.
+
+For a single unit change in log(GDP), on average, mortality.rate goes down by 9.032, assuming all other factors are held constant (but there are no others in this model).
+
+
+### c) Relation between mortality.rate and other variables.
+Now examine the relationship between mortality.rate vs Sanitation.faci, log(GDP) and Continent.
+
+**i)** Fit a model of `mortality.rate` vs. Log(GDP), Sanitation.faci and Continent. Report the summary.
+
+```{r}
+fit2 <- lm(mortality.rate~log(GDP)+Sanitation.faci+Continent, data)
+summary(fit2)
+```
+log(GDP) and Sanitation.faci have negative effects on mortality rate. Among all the continnent, Afira has the highest effect
+
+
+**ii)** Is log(GDP) a significant variable at .01 level after controlling for `Sanitation.faci` and `Continent`?
+
+```{r}
+Anova(fit2)
+```
+The p-value for log(GDP) is 0.08131, which is higher than 0.01. It is not significant at 0.01 level.
+
+**iii)** Are the means of mortality.rate among all Continents the same at .05 level after controlling for log(GDP) and `Sanitation.faci`?
+
+No, the means of mortality.rate will be different among all continents. 
+
+
+**iv)** Based on this model fit, which Continent appears to have the highest mortality.rate after controlling for log(GDP) and `Sanitation.faci`? (No test needed.)
+
+Africa
+
+
+## Question 3: Linear Model building
+
+In this question, we build a model for `mortality.rate` based on the covariates available in data. Your professor insists on that GDP should have been taken a log scale. So from now on you may drop GDP from the working data but keep log(GDP) there to avoid any potential issues. Call this extracted data as `data1`. (Show your code for this.)
+
+
+### a) LASSO Regression: fit.lasso.0
+
+**i)** Country names should not be a predictor. Explain why not? (one sentence only)
+
+We cannot include Country because the data does not vary at the country level and as a result, a model with country would have no degrees of freedom to estimate anything.
+
+**ii)** LASSO Regression: Use `cv.glmnet()` function on the data for the response `mortality.rate` on the covariates available. **Use the settings set.seed(471) and nfolds = 10.** (name this `fit.lasso.0`).
+
+```{r}
+data$log_gdp <- log(data$GDP)
+data <- data %>% dplyr::select(-GDP)
+data_sub <- data %>% dplyr::select(-Country)
+```
+
+```{r}
+X <- model.matrix(mortality.rate ~. , data_sub)[, -1]
+Y <- data$mortality.rate
+```
+
+```{r}
+set.seed(471)
+fit.lasso.0 <- cv.glmnet(X,Y,alpha=1,nfold=10)
+```
+
+```{r}
+plot(fit.lasso.0)
+```
+
+
+
+
+**iii)**  What is the `lambda.1se` value and what are the covariates in the  `lambda = lambda.1se` model?
+
+```{r}
+fit.lasso.0$lambda.1se
+```
+
+```{r}
+coef.1se <- coef(fit.lasso.0, s="lambda.1se")  
+coef.1se <- coef.1se[which(coef.1se != 0),] 
+coef.1se
+```
+lambda.1se = 4.466195
+non-zero varables:  `adolescent.fertility.rate`, `agri.forestry.fish.gdp.pct`, `fertility.rate`, `Immunization`, `Sanitation.faci`, `Immunization.measles`, `Internet.users` 
+
+
+
+### b) Lasso fit
+
+**i)** Start with the `lambda = lambda.1se` model. Refit the linear model using `lm()` with the variables chosen. Perform backward elimination on this model until all features are significant at $\alpha = 0.1$ (**not 0.01**) level. Call this final model `fit.lasso`. Report the summary of `fit.lasso`.
+
+```{r}
+fit_lasso <- lm(mortality.rate~adolescent.fertility.rate+agri.forestry.fish.gdp.pct+fertility.rate+
+                  Immunization+Sanitation.faci+Immunization.measles+Internet.users, data)
+summary(fit_lasso)
+Anova(fit_lasso)
+```
+```{r}
+fit_lasso.1 <- update(fit_lasso, .~.-adolescent.fertility.rate )
+Anova(fit_lasso.1)
+
+fit_lasso.2 <- update(fit_lasso.1, .~.-Immunization )
+Anova(fit_lasso.2)
+```
+
+```{r}
+fit.lasso <- fit_lasso.2
+summary(fit.lasso)
+```
+
+mortality.rate = 91.64096 + 0.36498*agri.forestry.fish.gdp.pct + 10.48264*fertility.rate + (-0.25222)*Sanitation.faci + (-0.7606)*Immunization.measles
+                  + (-0.13310)*Internet.users
+
+
+**ii)** Check to see if the linear model assumptions are reasonably met for `fit.lasso`. 
+```{r}
+par(mfrow = c(1, 2))
+plot(fit.lasso,1)
+plot(fit.lasso,2)
+
+#Linearity is basically satisfied, but there is a little cluster on the left. Normality is also somewhat satisfied, but there is a increase in residual in qq plot. 
+```
+
+**iii)** Report the summary and explain in (non-technical) words the what do coefficients/signs of covariates in `fit.lasso` imply. In particular, add a few sentences to suggest policy makers how to lower the mortality.rate for a country?
+
+agri.forestry.fish.gdp.pct: With other factors remain the same, as one unit increase, mortality rate will increase 0.36498      
+fertility.rate            : With other factors remain the same, as one unit increase, mortality rate will increase 10.48264   
+Sanitation.faci           : With other factors remain the same, as one unit increase, mortality rate will decrease 0.25222    
+Immunization.measles      : With other factors remain the same, as one unit increase, mortality rate will decrease 0.76065    
+Internet.users            : With other factors remain the same, as one unit increase, mortality rate will decrease 0.13310    
+
+fertility.rate has a relatively higher impact on mortality rate, so the government should have a little control on that to reduce the mortality rate. Increase the measles immunization percentage of children, increase the accessability to improved sanitation facilities in percentage, and increase Internet users can help to reduce mortality rate. Governments should have more policies to help on those.
+
+
+## Question 4: Prediction intervals
+
+Lesotho is a country in Africa that is in the data set. 
+
+**1)** Is Lesotho's `mortality.rate` unusually high based on your final model built in `fit.lasso`? Explain why or why not. No more than three lines with quantitative support.
+
+```{r}
+Lesotho <- data[data[,"Country"]=="Lesotho",]
+Lesotho
+predict(fit.lasso,Lesotho, interval="confidence",se.fit=TRUE)
+```
+Yes, it has unusually high mortality rate.
+
+
+\newpage
+
+## Part II: Logistic regression/classification, Breast Cancer Prediction
+
+The diagnosis of breast tumors has traditionally been performed by a full biopsy, an invasive surgical procedure. Fine needle aspirations (FNAs) provide a way to examine a small amount of tissue from the tumor and the use of machine learning techniques allow classification of tumors as either benign or malignant. Features are computed from a digitized image of a fine needle	aspirate (FNA) of a breast mass. They describe	characteristics of the cell nuclei present in the image. Wisconsin Diagnostic Breast Cancer (WDBC) has collected data on several features of tumor cells for 569 patients.\footnote{The description of the data can be found at \url{https://archive.ics.uci.edu/ml/machine-learning-databases/breast-cancer-wisconsin/wdbc.names} and the data is obtained from Kaggle \url{https://www.kaggle.com/yuqing01/breast-cancer}.} 
+\vspace{.1in}
+
+You have seen some analysis of this dataset in Quiz 3. In this exam, you will do a more refined analysis. First load the dataset using the following code. 
+```{r, data pareparation, eval = T}
+# you need to put the dataset in the same folder where this .rmd file sits.
+data.cancer <- read.csv("breast-cancer.csv")[,-c(1, 33)] 
+#names(data.cancer)
+data.cancer$diagnosis <- ifelse(data.cancer$diagnosis == "M", 1, 0)
+```
+
+## Question 1: Data preparation
+
+Throughout of the remaining exam, the response will be `diagnosis`. We have coded "M" to 1 and "B" to 0. 
+
+Read the above R-Chunk carefully and answering the following questions
+
+**i)** How many variables and observations does `data.cancer` have?
+```{r}
+dim(data.cancer)
+```
+There are 569 observations and 31 variables
+
+
+
+For our purposes, let split the data into training and test data using the following code:
+```{r}
+set.seed(4712)
+index.t <- sample(nrow(data.cancer), 100)
+train_wdbc <- data.cancer[index.t, ]
+test_wdbc  <- data.cancer[-index.t, ]
+```
+**ii)** What are the number of observations in `train_wdbc` and `test_wdbc`? 
+```{r}
+dim(train_wdbc)
+dim(test_wdbc)
+```
+There are 100 observations in `train_wdbc`, and there are 469 in `test_wdbc`.
+
+
+
+**iii)** What is the largest number in `index.t`?
+
+```{r}
+max(index.t)
+```
+the largest number in `index.t` is 556
+
+
+## Question 2: Linear versus Logistic Regression
+
+In lectures you have studied linear and logistic regression but never applied them on the same dataset. Lets apply logistic and linear regression for `diagnosis` on `area_worst` using `train_wdbc`.
+
+### a) Logistic regression fit.glm
+
+**i)** Report the probability equation of `P(diagnosis=1|area_worst)` using  `glm()`. Call this fit `fit.glm`. (You might get a warning; ignore this) Note: no need to write a beautiful latex form. Just write down the equation in a way that we can understand it. 
+```{r, results='hide'}
+fit.glm <- glm(diagnosis~area_worst, train_wdbc, family=binomial(logit)) 
+summary(fit.glm)
+```
+- $P(diagnosis=1|area_worst) = \frac{e^{-8.110600 - 0.009215 \times  area_worst}}{1+e^{-8.110600 - 0.009215 \times  area_worst}}$
+
+
+
+
+**ii)** Use .5 as the thresholing on the probability equation. Report the misclassification errors using the testing data `test_wdbc`. (Only the mis-classification error applied to the testing data is needed.)
+
+```{r}
+fit.glm.fitted.test <- data.frame(predict(fit.glm, test_wdbc, type="response"))
+```
+
+```{r}
+fitted.glm <- data.frame(ifelse(fit.glm.fitted.test > 0.5, "1", "0"))
+```
+
+
+```{r}
+mce <- mean(fitted.glm != train_wdbc$diagnosis)
+mce
+```
+mis-classification erro is 0.434968
+
+
+### b) Linear regreesioin fit.lm
+
+As another method, one could use linear regression treating `diagonosis` as a continues response variable and use the lm.fit to estimate the `P(diagnosis=1|area_worst)`. 
+
+**i)** Fit linear  model using `lm()`, and call this fit `fit.lm`. Report the linear equation obtained. 
+```{r}
+fit.lm <- lm(diagnosis~area_worst, train_wdbc)
+summary(fit.lm)
+```
+P(diagnosis=1|area_worst) = -6.281e-02 +  4.569e-04 * area_worst
+
+**ii)** Use .5 as the thresholing on the probability this `fit.lm` equation. Report the misclassification errors using the testing data `test_wdbc`. Note: you only need to output the mis-classification error using the testing data. 
+
+
+```{r}
+fit.lm.fitted.test <- data.frame(predict(fit.lm, test_wdbc, type="response"))
+```
+
+
+```{r}
+fitted.lm <- data.frame(ifelse(fit.lm.fitted.test> 0.5, "1", "0"))
+```
+
+```{r}
+mce <- mean(fitted.lm != train_wdbc$diagnosis)
+mce
+```
+mis-classification erro is 0.4136461
+
+
+
+### c) Findings
+
+Which method yielded a better classification rule with smaller testing misclassification error? Write a couple of sentences to comment on the fundamental differences between `fit.lm` and `fit.glm`.
+ 
+Linear Regression yielded a better classification rule with the smaller testing misclassification error
+
+1.The Linear regression models data using continuous numeric value. As against, logistic regression models the data in the binary values.
+2. Linear regression requires to establish the linear relationship among dependent and independent variable whereas it is not necessary for logistic regression.
+3. In the linear regression, the independent variable can be correlated with each other. On the contrary, in the logistic regression, the variable must not be correlated with each other.
+
+
+\vspace{0.1in}
+
+
+**Declaration**
+By submitting this document you certify that you have complied with the University of Pennsylvania's Code of Academic Integrity, to the best of your knowledge. You further certify that you have taken this exam
+under its sanctioned conditions, i.e. solely within the set exam room and within the time allotted.
