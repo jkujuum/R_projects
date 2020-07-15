@@ -1,0 +1,451 @@
+---
+title: "STAT 471/571/701 Modern Data Mining - HW 1"
+author:
+- Group Member Bingying Feng
+- Group Member He Zhang
+- Group Member Dingzhe Leng
+date: 'Due: 11:59PM February 3, 2019'
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+urlcolor: blue
+---
+
+```{r setup, include=FALSE,eval=T}
+knitr::opts_chunk$set(fig.height=5, fig.width=7, warning = F)
+# check if you have ISLR package, if not, install it
+if(!require('pacman')) {install.packages('pacman')}
+pacman::p_load(ISLR)
+
+# constants for homework assignments
+hw_num <- 1
+hw_due_date <- "February 3, 2019"
+
+library (tidyverse)
+
+```
+
+## Question 0
+
+Review the code and concepts covered during lecture. 
+
+
+
+# Simple Regression
+    
+## Question 1
+
+This exercise is designed to help you understand the linear model using simulations. In this exercise, we will generate $(x_i, y_i)$ pairs so that all linear model assumptions are met.
+
+Presume that $x$ and $y$ are linearly related with a normal error $\epsilon$ , such that $y = 1 + 1.2x + \epsilon$. The standard deviation of the error is $\sigma = 2$. 
+
+We can create a sample input vector ($n = 40$) for $x$ with the following code:
+
+```{r, eval = T}
+# Generates a vector of size 40 with equally spaced values between 0 and 1, inclusive
+x <- seq(0, 1, length = 40)
+```
+
+
+### Q1.1 Generate data
+
+Create a corresponding output vector for $y$ according to the equation given above. Use `set.seed(1)`. Then, create a scatterplot with $\left(x, y\right)$ pairs. Base R plotting is acceptable, but if you can, please attempt to use `ggplot2` to create the plot. Make sure to have clear labels and sensible titles on your plots.
+
+```{r}
+#generate eps
+set.seed(1)
+eps<-rnorm(40,0,2)
+#generate y
+y<-1+1.2*x+eps
+simple.reg<-data.frame(x,y,eps)
+#create plot
+plot1<-ggplot(simple.reg,aes(x=simple.reg$x, y = simple.reg$y)) + 
+       geom_point()+
+       ggtitle("PLOT X-Y")+
+       xlab("X")+
+       ylab("Y")
+plot1
+```
+
+### Q1.2 Understand the model
+i. Find the LS estimates of $\beta_0$ and $\beta_1$, using the `lm()` function. What are the true values of $\beta_0$ and $\beta_1$? Do the estimates look to be good? 
+
+ii. What is your RSE for this linear model fit? Is it close to $\sigma = 2$? 
+
+ii. What is the 95% confidence interval for $\beta_1$? Does this confidence interval capture the true $\beta_1$?
+
+iii. Overlay the LS estimates and the true lines of the mean function onto a copy of the scatterplot you made above.
+```{r}
+fit1<-lm(y~x,data=simple.reg)
+summary(fit1)
+summary(fit1)$sigma ##RSS <- sum((fit1$res)^2)  sqrt(RSS/fit1$df)
+confint(fit1)
+y_mean<-1+1.2*x
+simple.reg<-data.frame(simple.reg,y_mean)
+plot1+
+  geom_smooth(method="lm", se = F,color = "red") + 
+  geom_line(aes(x,y_mean),linetype=1,color="blue")
+```
+
+i. The true values of $\beta_0$ and $\beta_1$ are 1 and 1.2 respectively.For $\beta_0$, it's acceptable. At $\alpha$=0.05, we can reject null hypothesis that $\beta_0$ equals zero.For $\beta_1$, we fail to reject the null hypothesis, but $\beta_1$ is not zero in fact. Overall, the estimates don't look good. 
+
+ii. RSE for this linear model fit is 1.794. Yes, it's close to $\sigma = 2$
+
+ii. The 95% confidence interval for $\beta_1$ is [-1.03,2.85]. Yes, it captures the true $\beta_1$.
+
+
+### Q1.3 Model diagnoses
+
+i. Provide residual plot of `x = fitted y`, `y = residuals`. 
+
+ii. Provide a QQ-Normal plot of the residuals
+
+iii. Comment on how well the model assumptions are met for the sample you used. 
+
+```{r}
+plot2<-ggplot(fit1,aes(fit1$fitted.values,fit1$residuals))+
+       geom_point()
+plot2
+qqnorm(fit1$residuals)
+qqline(fit1$residuals)
+```
+
+iii. From the residual plot, we can see that the volatility of residual doesn't change accordding to fitted value, which meets our assumption that variances are the same to all the levels of x.The normal Q-Q plot doesn't fit very well. The lower tail and upper tail are both off the line. However, most of the points are on the line so it's acceptable, which meets the assumption of normality.
+
+
+### Q1.4 Understand sampling distribution and confidence intervals
+
+This part aims to help you understand the notion of sampling statistics and confidence intervals. Let's concentrate on estimating the slope only.  
+
+Generate 100 samples of size $n = 40$, and estimate the slope coefficient from each sample. We include some sample code below, which should guide you in setting up the simulation. Note: this code is easier to follow but suboptimal; see the appendix for a more optimal R-like way to run this simulation.
+```{r, eval = T}
+# Inializing variables. Note b_1, upper_ci, lower_ci are vectors
+x <- seq(0, 1, length = 40) 
+n_sim <- 100              # number of simulations
+b1 <- 0                   # n_sim many LS estimates of beta_1 (=1.2). Initialize to 0 for now
+upper_ci <- 0             # upper bound for beta_1. Initialize to 0 for now.
+lower_ci <- 0             # lower bound for beta_1. Initialize to 0 for now.
+t_star <- qt(0.975, 38)   # Food for thought: why 38 instead of 40? What is t_star? 38 is the degree of freedom because we have two coeffiecnts to estimate; t_star is the t-value with dt at 38 at alpha=0.05
+
+# Perform the simulation
+for (i in 1:n_sim){
+  y <- 1 + 1.2 * x + rnorm(40, sd = 2)
+  lse <- lm(y ~ x)
+  lse_output <- summary(lse)$coefficients
+  se <- lse_output[2, 2]
+  b1[i] <- lse_output[2, 1]
+  upper_ci[i] <- b1[i] + t_star * se
+  lower_ci[i] <- b1[i] - t_star * se
+}
+results <- as.data.frame(cbind(se, b1, upper_ci, lower_ci))
+
+# remove unecessary variables from our workspace
+rm(se, b1, upper_ci, lower_ci, x, n_sim, b1, t_star, lse, lse_out) 
+```
+
+i. Summarize the LS estimates of $\beta_1$ (stored in `results$b1`). Does the sampling distribution agree with theory? 
+
+ii.  How many of your 95% confidence intervals capture the true $\beta_1$? Display your confidence intervals graphically. 
+```{r}
+summary(results$b1)
+qqnorm(results$b1)
+qqline(results$b1)
+results %>%
+  filter(results$upper_ci>=1.2&results$lower_ci<=1.2)%>%
+  summarize(count=n())
+  ggplot(results,aes(1:100,results$lower_ci))+
+  geom_ribbon(aes(ymin=results$lower_ci,ymax=results$upper_ci),colour="black",alpha=0.3,fill="blue")+
+  xlab("sequence")+
+  ylab("confidental intervals")
+  
+```
+
+i. The mean of LS estimates of $\beta_1$ is 1.05,which is close to the true value 1.2. We fit QQ-normal plot to them.It's acceptable althought the upper tail is a little bit off the line. So, it agrees with theory.
+
+ii. 96 confidence intervals capture the true $\beta_1$.
+
+## Question 2
+
+This question is about Major League Baseball (MLB) and team payrolls. Guiding questions: how do salaries paid to players affect team wins? How could we model win propensity?
+
+We have put together a dataset consisting of the winning records and the payroll data of all 30 MLB teams from 1998 to 2014. There are 54 variables in the dataset, including:
+
+- `payroll`: total team payroll (in $billions) over the 17-year period 
+- `avgwin`: the aggregated win percentage over the 17-year period
+- winning percentage and payroll (in $millions) for each team are also broken down for each year. 
+
+The data is stored as `MLPayData_Total.csv` on Canvas.
+
+```{r}
+setwd("I:/homework") #setwd("E:/Semester 2/Modern data mining/Week_1")
+salary<- read.csv("MLPayData_Total.csv",sep=",")
+```
+
+### Q2.1 Exploratory questions
+
+For each of the following questions, there is a `dplyr` solution that you should try to answer with.
+
+i. Which 5 teams spent the most money in total between years 2000 and 2004, inclusive?
+
+ii. Between 1999 and 2000, inclusive, which team(s) "improved" the most? That is, had the biggest percentage gain in wins?
+
+iii. Using `ggplot`, pick a single year, and plot the number of games won vs. `payroll` for that year (`payroll` on x-axis). You may use any 'geom' that makes sense, such as a scatterpoint or a label with the point's corresponding team name.
+
+```{r}
+#i
+salary<- salary %>%
+  mutate(total_00_04= p2000+p2001+p2002+p2003+p2004)
+head(arrange(salary,desc(total_00_04))%>%select(Team.name.2014,total_00_04),5)
+#ii
+salary<- salary %>%
+  mutate(change_19_20= X2000/X1999-1)  # or mutate(change_19_20= X2000.pct-X1999.pct)
+salary %>% select(Team.name.2014,change_19_20)%>% filter(change_19_20== max(change_19_20))
+#iii
+ggplot(salary)+
+  geom_point(aes(x=p2004,y=X2004),col="red")+
+  geom_text(aes(x = p2004, y = X2004, label=Team.name.2014)) 
+```
+
+i.By descending order, New York Yankees, Boston Red Sox, Los Angeles Dodgers, New York Mets, and Atlanta Braves spent the most money in total between years 2000 and 2004.
+
+ii. Between 1999 and 2000, both Chicago White Sox and St. Louis Cardinals improved the most, with the percentage gain in wins at 26.7%.
+
+iii. Scatterplot with labels of team names.
+
+### Q2.2
+
+For a given year, is `payroll` a significant variable in predicting the winning percentage of that year? Choose a single year and run a regression to examine this. You may try this for a few different years. You can do this programmatically (i.e. for every year) if you are interested, but it is not required.
+
+```{r}
+for(i in 1:5) {
+  M<- lm(salary[,52-i+1]~salary[,6+i-1],data=salary)
+  print(summary(M))
+}
+# every year
+#for(i in 1:17) {
+#  E<- lm(salary[,54-i+1]~salary[,4+i-1],data=salary)
+#  print(summary(E))
+#}
+```
+
+I ran regressions for years between 2000 and 2004 (inclusive).I set the significance level at 0.05 and compare the p-value of "payroll" to this benchmark. In the first two years, "payroll" is not a significant variable in predicting the winning percentage; in the last three years, it is a significant variable in such prediction.
+
+### Q2.3
+
+With the aggregated information, use regression to analyze total payroll and overall winning percentage. Run appropriate model(s) to answer the following questions:
+
+i. In this analysis, do the [Boston Red Sox](http://darkroom.baltimoresun.com/wp-content/uploads/2013/10/SP.BOSTON28P2.jpg) perform reasonably well given their total amount spent on payroll? [Use a 95% interval.]
+
+ii. Given their winning percentage, how much would you have expected the Oakland A's to have spent on total payroll? [Use a 95% interval.]
+
+```{r}
+#i 
+M<- lm(avgwin~ payroll, data= salary)
+summary(M)
+salary%>% select(Team.name.2014,payroll,avgwin)%>% filter(Team.name.2014== "Boston Red Sox")
+new <- data.frame(payroll=c(1.972359))
+CIpred <- predict(M, new, interval="prediction", se.fit=TRUE,level=0.95)
+CIpred 
+
+#ii
+M_inverse<- lm(payroll~ avgwin, data=salary)
+summary (M_inverse)
+salary%>% select(Team.name.2014,payroll,avgwin)%>% filter(Team.name.2014== "Oakland Athletics")
+new_1 <- data.frame(avgwin=c(0.5445067))
+CIpred_1 <- predict(M_inverse, new_1, interval="prediction", se.fit=TRUE,level=0.95)
+CIpred_1
+```
+i To answer this question, I 1) run a regression of total payroll and overall winning percentage, 2) calculated the predicted winning percentage using the payroll by Boston Red Sox, 3) calculated the prediction interval for Boston Red Sox, and 4) see if the team's winning percentage is within this interval.
+
+Boston Red Sox's winning percentage is 0.5487, within the prediction interval between 0.5436 and 0.6025. Therefore, this team is performing resonably well given their total amount spent on payroll.
+
+ii To answer this question, I have to run another model to predict total payroll using winning percentage.
+Using a 95% prediction interval, I would expext Oakland Athletics to have spent from 0.9488 to 2.2678 billion dollars.
+
+
+# Multiple Regression
+
+## Question 3:
+
+This question utilizes the `Auto` dataset from ISLR. The original dataset contains 408 observations about cars. It is similar to the CARS dataset that we use in our lectures. To get the data, first install the package ISLR. The `Auto` dataset should be loaded automatically. We'll use this dataset to practice the methods learnt so far. 
+
+You can access the necessary data with the following code:
+
+```{r, eval = T}
+# Read in the Auto dataset
+auto_data <- ISLR::Auto   
+```
+
+Get familiar with this dataset first. Tip: you can use the command `?ISLR::Auto` to view a description of the dataset. 
+
+### Q3.1
+Explore the data, with particular focus on pairwise plots and summary statistics. Briefly summarize your findings and any peculiarities in the data.
+
+```{r}
+dim(auto_data)
+summary(auto_data)
+str(auto_data)
+pairs(auto_data[,1:8])
+```
+
+Mpg ranges from 9.0-46.6, with a mean of 23.4 and a mean of 23.45. There are 8 variables: cylinders, diaplacement, horsepower, weight, acceleration, year, oringin and name. Five levels are reported in Cylinders (3,4,5,6,8). The mean displacement was 151, the mean horsepower was 105, and the mean weight was 2804 pounds. The year range goes from 70-82.The pairwise plots help to reveal some information about the relationship between variables. From the plots its clear to see how mpg has negative relationships with cylinders, displacement, horsepower, and weight (i.e. mpg decreases as they increase). However, mpg looks to have a positive relation with year and increases from origin. Some other interesting relationships to note: Displacement, horsepower, and weight all have increasing relationships with cylinders. At the same time, they all have decreasing relationships across origin
+
+
+### Q3.2
+What effect does `time` have on `MPG`?
+
+i. Start with a simple regression of `mpg` vs. `year` and report R's `summary` output. Is `year` a significant variable at the .05 level? State what effect `year` has on `mpg`, if any, according to this model. 
+
+```{r}
+fit1 <- lm(mpg~year, data=auto_data)
+summary(fit1)
+
+```
+
+Yes, year is significant at thr .05 level due to the small p-value. For a one year increase in car model year, the expected average increase in mpg is 1.23.
+
+ii. Add `horsepower` on top of the variable `year` to your linear model. Is `year` still a significant variable at the .05 level? Give a precise interpretation of the `year`'s effect found here. 
+
+```{r}
+fit2 <- lm(mpg~year+horsepower, data=auto_data)
+summary(fit2)
+```
+
+Yes, still a significant variable at the .05 level due to small p-value. If the car model increases by one year and horsepower stays constant, the expected average increase in mpg is 0.657.
+
+iii. The two 95% CI's for the coefficient of year differ among i) and ii). How would you explain the difference to a non-statistician?
+
+```{r}
+confint(fit1,"year")
+confint(fit2,"year")
+```
+
+In the first regression, year was the only predictor and thus it had to explain all the variability in mpg. In the second regression, horsepower was added so that there were two predictors to help explain the variability of mpg. The result of this difference is that the standard error of year is higher when it is the only predictor than when it is a predictor along with horsepower. In addition, the coefficient estimates of year differ. The higher standard error means it has a wider confidence interval, and the differenct estimated values give the intervals different middle points.
+
+iv. Create a model with interaction by fitting `lm(mpg ~ year * horsepower)`. Is the interaction effect significant at .05 level? Explain the year effect (if any). 
+
+```{r}
+fit3 <-lm(mpg ~ year * horsepower, data = auto_data)
+summary(fit3)
+```
+
+Yes, it is still significant at .05 level. For a unit increase in horsepower, the effect of year on mpg decrease by -1.596e-02. The coefficient of year is affected by the level of horsepower.
+
+
+### Q3.3
+Remember that the same variable can play different roles! Take a quick look at the variable `cylinders`, and try to use this variable in the following analyses wisely. We all agree that a larger number of cylinders will lower mpg. However, we can interpret `cylinders` as either a continuous (numeric) variable or a categorical variable.
+
+i. Fit a model that treats `cylinders` as a continuous/numeric variable: `lm(mpg ~ horsepower + cylinders, ISLR::Auto)`. Is `cylinders` significant at the 0.01 level? What effect does `cylinders` play in this model?
+
+```{r}
+fit4 <- lm(mpg ~ horsepower + cylinders, data = auto_data)
+summary(fit4)
+```
+
+Cylinder is significant at the 0.01 level due to low p-value. With one unit increase in cylinder with horse power remain the same, the expected average decrease in mpg is 1.92
+
+ii. Fit a model that treats `cylinders` as a categorical/factor variable:  `lm(mpg ~ horsepower + as.factor(cylinders), ISLR::Auto)`. Is `cylinders` significant at the .01 level? What is the effect of `cylinders` in this model? Use `anova(fit1, fit2)` and `Anova(fit2`) to help gauge the effect. Explain the difference between `anova()` and `Anova`.
+
+```{r}
+library(car)
+fit5 <- lm(mpg ~ horsepower + as.factor(cylinders), data = auto_data)
+summary(fit5)
+fit6 <-  lm(mpg ~ horsepower, data = auto_data)
+summary(fit6)
+anova(fit6,fit5)
+Anova(fit5)
+```
+
+Cylinder is significant at 0.01 level due to low p-value in both the anova() and Anova() analyses. anova() calculates type I tests, meaning variables are added in sequential order. Anova() calculates type II and type III tests, testing each variable after all others.
+
+iii. What are the fundamental differences between treating `cylinders` as a continuous and categorical variable in your models? 
+
+If we treat cylinder as a continuous variable, then the relationship between cylinders and the response can be estimated by a linear or polynomial function. However, treating cylinder as a categorival variable, we will have different response value to be fit for each level of the variable.
+
+
+
+### Q3.4
+Final modelling question: we want to explore the effects of each feature as best as possible. You may explore interactions, feature transformations, higher order terms, or other strategies within reason. The model(s) should be as parsimonious (simple) as possible unless the gain in accuracy is significant from your point of view.
+  
+i. Describe the final model. Include diagnostic plots with particular focus on the model residuals and diagnoses.
+
+```{r}
+auto_data1 <- select(auto_data,-c("name"))  #deselect unrelevant variables
+auto_data1$cylinders <- as.factor(auto_data1$cylinders)
+auto_data1$origin <- as.factor(auto_data1$origin)
+fit7 <- lm(mpg~.,auto_data1)
+summary(fit7)
+Anova(fit7)  # find out "acceleration" can be dropped,it's not significant
+# find significant predictor and interactions
+auto_data2 <- select(auto_data1,-c("acceleration"))
+fit8 <- lm(mpg~.*.,data=auto_data2)
+summary(fit8)
+Anova(fit8)
+# Decide to use these predictors and interactions in the final model
+fit9 <- lm(mpg~cylinders+horsepower+weight+year+origin+horsepower:origin+weight:origin+cylinders:year,data=auto_data2)
+summary(fit9)
+Anova(fit9)
+par(mfrow=c(1,2))
+plot(fit9,1)  #residual plot
+abline(h=0,col="blue")
+plot(fit9,2)  #qqplot
+```
+
+We first remove name from variables because it is definetely not significant to our model. Then I changed cylinder and origin to factors and ran a regression on all variables. Summary and Anova tells me that "acceleration" is not significant, so we remove it as well. Then we run a regression on all variables and their interactions. With summary and Anova, we pick significant variables and interations to build our final model fit9. Significant variables and interations are cylinders, horsepower, weight, year, origin, horsepower:origin, weight:origin, cylinders:year
+The residual plot shows that the residualis somewhat randomly dispersed around horizontal axis, so a linear regression model is appropriate.
+The qqplot shows that the residuals might not from a normal distribution at the tail, but overall somewhat normal.
+
+ii. Summarize the effects found.
+
+```{r}
+summary(fit9)
+```
+
+ii. MPG has negative relationship with weight and horsepower, positive relationship with year and origin. MPG is also affected by interactive of year and different cylinders, most are negative effects but cylinder5:year. MPG is also affected by interactive of horsepower:origin and weight:origin
+
+iii. Predict the `mpg` of the following car: A red car built in the US in 1983 that is 180 inches long, has 8 cylinders, displaces 350 cu. inches, weighs 4000 pounds, and has a horsepower of 260. Also give a 95% CI for your prediction.
+
+```{r}
+newcar <- auto_data2[1,]
+newcar[1,] <- NA
+newcar["year"] <- 83
+newcar["cylinders"] <- as.factor(8)
+newcar["displacement"] <- 350
+newcar["weight"] <- 4000
+newcar["horsepower"] <- 260
+newcar["origin"] <- as.factor(1)
+
+predict(fit9,newcar, interval="confidence",se.fit=TRUE)
+
+# predicted mpg is 17.70455 with a 95% confidence interval of [14.0013, 21.40781]
+
+```
+
+predicted mpg is 17.70455 with a 95% confidence interval of [14.0013, 21.40781].
+
+
+## Appendix
+
+This is code that is roughly equivalent to what we provide above in Question 2 but is more streamlined (simulations).
+
+```{r, eval = F}
+simulate_lm <- function(n) {
+  # note: `n` is an input but not used (don't worry about this hack)
+  x <- seq(0, 1, length = 40) 
+  y <- 1 + 1.2 * x + rnorm(40, sd = 2)
+  t_star <- qt(0.975, 38)
+  lse <- lm(y ~ x)
+  lse_out <- summary(lse)$coefficients
+  se <- lse_out[2, 2]
+  b1 <- lse_out[2, 1]
+  upper_CI = b1 + t_star * se
+  lower_CI = b1 - t_star * se
+  return(data.frame(se, b1, upper_CI, lower_CI))
+}
+
+# this step runs the simulation 100 times, 
+# then matrix transposes the result so rows are observations 
+sim_results <- data.frame(t(sapply(X = 1:100, FUN = simulate_lm)))
+```
+
