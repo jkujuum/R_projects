@@ -1,0 +1,662 @@
+---
+title: "Modern Data Mining - HW 2"
+author:
+- Bingying Feng
+- Group He Zhang
+- Group Dingzhe Leng
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.height=5, fig.width=11, warning = F)
+if(!require('pacman')) {
+  install.packages('pacman')
+}
+pacman::p_load(ISLR, leaps, car, tidyverse, GGally, reshape2)
+# constants for homework assignments
+hw_num <- 2
+hw_due_date <- "Feb, 24, 2019"
+```
+
+## Overview / Instructions
+
+This is homework #`r paste(hw_num)` of STAT 471/571/701. It will be **due on `r paste(hw_due_date)` by 11:59 PM** on Canvas. You can directly edit this file to add your answers. Submit the Rmd file *and* a knitted (PDF, Word, or HTML) version, with only 1 submission allowed per HW team.
+
+```{r library, include=FALSE}
+# add your library imports here:
+library(dplyr)
+library(tidyverse)
+library(leaps)
+library(glmnet)
+library(ggplot2)
+```
+
+## Problem 0
+
+Review the code and concepts covered during lecture: multiple regression, model selection and penalized regression through elastic net. 
+
+
+## Problem 1
+
+Do ISLR, page 262, problem 8, parts (a) through (e), and write up the answer here. This question is designed to help us understanding model selection through simulations. 
+(f) Describe as accurate as possible what $C_p$ and BIC are estimating?
+
+
+(a) Use the rnorm() function to generate a predictor X of length n = 100, as well as a noise vector  of length n = 100.
+```{r}
+set.seed(1)
+x <- rnorm(100)
+noise <- rnorm(100) 
+```
+
+(b) Generate a response vector Y of length n = 100 according to the model
+$$ \text{Y} =  \beta_0+ \beta_1X +\beta_2X^2+\beta_3X^3+e$$
+where $\beta_0$, $\beta_1$, $\beta_2$, and $\beta_3$ are constants of your choice.
+```{r}
+b0 <- 5
+b1 <- 4
+b2 <- 3
+b3 <- 2
+y <- b0 + b1*x + b2*x^2 + b3*x^3 + noise
+```
+
+(c) Use the regsubsets() function to perform best subset selection in order to choose the best model containing the predictors X, X2,...,X10. What is the best model obtained according to Cp, BIC, and adjusted R2? Show some plots to provide evidence for your answer, and report the coefficients of the best model obtained. Note you will need to use the data.frame() function to create a single data set containing both X and Y.
+```{r}
+data <- data.frame(y = y,x = x)
+```
+
+Use library leaps to do regsubsets
+```{r}
+fit.exh <- regsubsets(y ~ x + I(x^2) + I(x^3) + I(x^4) + I(x^5) + I(x^6) + I(x^7) + I(x^8) + I(x^9) + I(x^10), data = data, nvmax = 10)
+f.e <- summary(fit.exh)
+```
+```{r}
+par(mfrow=c(3,1), mar=c(2.5,4,0.5,1), mgp=c(1.5,0.5,0)) 
+plot(f.e$cp, xlab="Number of predictors", 
+     ylab="cp", col="red", type="p", pch=16)
+plot(f.e$bic, xlab="Number of predictors", 
+     ylab="bic", col="blue", type="p", pch=16)
+plot(f.e$adjr2, xlab="Number of predictors", 
+     ylab="adjr2", col="green", type="p", pch=16)
+```
+
+
+We find the Optimal Model by Cp
+locate the optimal model size by $Cp$'s is 4
+```{r}
+opt.size <- which.min(f.e$cp)
+opt.size
+```
+Now we look for the optimal variables selected
+```{r}
+fit.exh.var <- f.e$which # logic indicators which variables are in
+fit.exh.var[opt.size,] 
+```
+
+Find the coefficients
+```{r}
+coef(fit.exh,4)
+```
+
+Fit the final model
+```{r}
+fit.final.exh <- lm(y ~ x + I(x^2) + I(x^3) + I(x^5), data)
+summary(fit.final.exh)
+```
+
+
+(d) Repeat (c), using forward stepwise selection and also using backwards stepwise selection. How does your answer compare to the results in (c)?
+
+Using Forward Selection
+```{r}
+fit.forward <- regsubsets(y ~ x + I(x^2) + I(x^3) + I(x^4) + I(x^5) + I(x^6) + I(x^7) + I(x^8) + I(x^9) + I(x^10), data = data, nvmax = 10,method="forward")
+f.f <- summary(fit.forward)
+```
+
+Plot criteria for comparison
+```{r}
+par(mfrow=c(3,1), mar=c(2.5,4,0.5,1), mgp=c(1.5,0.5,0)) 
+plot(f.f$cp, xlab="Number of predictors", 
+     ylab="cp", col="red", type="p", pch=16)
+plot(f.f$bic, xlab="Number of predictors", 
+     ylab="bic", col="blue", type="p", pch=16)
+plot(f.f$adjr2, xlab="Number of predictors", 
+     ylab="adjr2", col="green", type="p", pch=16)
+```
+
+
+We find the Optimal Model by Cp
+locate the optimal model size by $Cp$'s is 4
+```{r}
+opt.size <- which.min(f.f$cp)
+opt.size
+```
+Now we look for the optimal variables selected
+```{r}
+fit.f.var <- f.f$which # logic indicators which variables are in
+fit.f.var[opt.size,] 
+```
+
+Find the coefficients
+```{r}
+coef(fit.forward,4)
+```
+
+Fit the final model
+```{r}
+fit.final.forward <- lm(y ~ x + I(x^2) + I(x^3) + I(x^5), data)
+summary(fit.final.forward)
+```
+
+
+Backward Selection
+
+Using Backward Selection
+```{r}
+fit.backward <- regsubsets(y ~ x + I(x^2) + I(x^3) + I(x^4) + I(x^5) + I(x^6) + I(x^7) + I(x^8) + I(x^9) + I(x^10), data = data, nvmax = 10,method="backward")
+f.b <- summary(fit.backward)
+```
+
+Plot criteria for comparison
+```{r}
+par(mfrow=c(3,1), mar=c(2.5,4,0.5,1), mgp=c(1.5,0.5,0)) 
+plot(f.b$cp, xlab="Number of predictors", 
+     ylab="cp", col="red", type="p", pch=16)
+plot(f.b$bic, xlab="Number of predictors", 
+     ylab="bic", col="blue", type="p", pch=16)
+plot(f.b$adjr2, xlab="Number of predictors", 
+     ylab="adjr2", col="green", type="p", pch=16)
+```
+
+
+We find the Optimal Model by Cp
+locate the optimal model size by $Cp$'s is 4
+```{r}
+opt.size <- which.min(f.b$cp)
+opt.size
+```
+Now we look for the optimal variables selected
+```{r}
+fit.b.var <- f.b$which # logic indicators which variables are in
+fit.b.var[opt.size,] 
+```
+
+Find the coefficients
+```{r}
+coef(fit.backward,4)
+```
+
+Fit the final model
+```{r}
+fit.final.backward <- lm(y ~ x + I(x^2) + I(x^3) + I(x^9), data)
+summary(fit.final.backward)
+
+```
+
+(e) Now fit a lasso model to the simulated data, again using X, X2, ...,X10 as predictors. Use cross-validation to select the optimal value of ??. Create plots of the cross-validation error as a function of ??. Report the resulting coefficient estimates, and discuss the results obtained.
+
+prepare the x matrix
+```{r}
+X <- model.matrix(y ~ x + I(x^2) + I(x^3) + I(x^4) + I(x^5) + I(x^6) + I(x^7) + I(x^8) + I(x^9) + I(x^10), data = data)[, -1]
+```
+
+
+To accomplish the Cross Validation, we use the function `cv.glmnet()`
+```{r}
+fit.cv <- cv.glmnet(X, y, alpha = 1, nfolds = 10) 
+plot(fit.cv)
+```
+
+find $\lambda$, we choose to use 1se lambda
+```{r}
+fit.cv$lambda.1se
+```
+
+Find non-zero variables and coefficients, non-zero coefficients are "X""  "I(x^2)"      "I(x^3)"      "I(x^4)"      "I(x^5)"      "I(x^7)"
+```{r}
+coef.1se <- coef(fit.cv, s="lambda.1se")  
+coef.1se <- coef.1se[which(coef.1se !=0),] 
+coef.1se
+var.1se <-rownames(as.matrix(coef.1se))
+var.1se
+```
+
+prepare for lm fomulae
+```{r}
+lm.input <- as.formula(paste("y", "~", paste(var.1se[-1], collapse = "+"))) 
+lm.input
+ 
+```
+
+
+Fit the linear model with LASSO output variables
+```{r}
+fit.1se.lm <-lm(lm.input,data=data)
+summary(fit.1se.lm)
+```
+Using LASSO estimation, we obtained 6 non-zero variables which are "X""  "I(x^2)"      "I(x^3)"      "I(x^4)"      "I(x^5)"      "I(x^7)".
+After fitting a linear model to these variables we get a model with adjusted R-square of 0.9904. Also, 3 of 6 variables are significant at 0.05 level. 
+
+(f) Describe as accurate as possible what $C_p$ and BIC are estimating?
+
+BIC calculates the probability of the model after seeing the data, when assigning equal probability to each
+model. In other words, BIC is an estimate of a function of the posterior probability of a model being true, under a certain Bayesian setup, so that a lower BIC means that a model is considered to be more likely to be the true model.
+
+The Cp statistic adds a penalty of 2d??^2 to the training RSS in order to adjust for the fact that the training error tends to underestimate the test error. So the penalty increases as the number of predictors in the model increases; this is intended to adjust for the corresponding decrease in training RSS. If the full model is true, Cp is an unbiased estimator of average prediction errors.
+
+
+
+## Problem 2:
+
+This will be the last part of the Auto data from ISLR. The original data contains 408 observations about cars. It has some similarity as the Cars data that we use in our lectures. To get the data, first install the package `ISLR`. The data set `Auto` should be loaded automatically. We use this case to go through methods learned so far. 
+
+You can access the necessary data with the following code:
+
+```{r, eval = F}
+# check if you have ISLR package, if not, install it
+if(!requireNamespace('ISLR')) install.packages('ISLR') 
+auto_data <- ISLR::Auto
+```
+
+Final modelling question: We want to explore the effects of each feature as best as possible. 
+
+You may explore the possibility of variable transformations. We normally do not suggest to transform $x$ for the purpose of interpreation. You may consider to transform $y$ to either correct the violation of the linear model assumptions or if you feel a transformation of $y$ makes more sense from an interpretaation pespective. You may also explore adding interactions and higher order terms. The model(s) should be as *parsimonious* (simple) as possible, unless the gain in accuracy is significant from your point of view. Use Mallow's $C_p$ or BIC to select the model.
+
+#### Exploratory Data Analysis
+
+How many observations and variables are contained in the data-set?
+```{r}
+dim(auto_data)
+```
+
+We have 392 observations and 9 variables.
+
+Variable names
+```{r}
+names(auto_data)
+```
+
+Summary of the data
+```{r}
+summary(auto_data)
+```
+
+
+Let's see if we have any missing values
+```{r}
+sum(is.na(auto_data)) # this may not work if the missing is not coded as "NA"
+```
+
+There is no missing value in this data set.
+
+#### Correlation heatmap
+```{r}
+plotData <-melt(cor(auto_data[sapply(auto_data, is.numeric)]))
+
+ggplot(plotData ,
+    aes(x = Var1, y = Var2, fill =value)) +
+    geom_tile() +
+    ylab("") +
+    xlab("") +
+scale_x_discrete(limits = rev(levels(plotData $Var2))) + #Flip the x- or y-axis
+    scale_fill_gradient( low = "#56B1F7", high = "#132B43") +     #lightblue to darkblue
+    #scale_fill_gradient( low = "white", high = "black") + #white to black
+       guides(fill = guide_legend(title = "Correlation"))
+```
+
+
+#### model building
+ In the linear model assumption, $\epsilon$ is normal distribution,which means there is possibility that y is negative. However, it's impossible for "mpg" to be negative or zero. So, we need to use logarithm format of "mpg" as y in our model.
+
+Transform `mpg` to `log(mpg)` and rename the column
+```{r}
+data1 <- cbind(log(auto_data$mpg), auto_data)
+# data1 <- data.frame(log(data.comp$Salary), data.comp) # Another way of doing the same
+# data1 <- data.comp %>% mutate(log_salary = log(Salary)) # dplyr solution
+names(data1)[1] <- "Logmpg" # Rename it
+```
+
+Let's look at some variable transformation candidates.
+```{r, message=FALSE}
+data1 %>%
+  select_if(is.numeric) %>%
+  ggpairs()
+```
+
+We examine some residual points for a linear regression to see if there are some outliers, heteroscedasticity, normality etc. Compare the residual plot in which the `mpg` variable isn't transformed.
+
+```{r}
+par(mfrow=c(1,2), mar=c(2.5,3,1.5,1), mgp=c(1.5,0.5,0))     # Compare different criteria 
+plot(lm(Logmpg ~ horsepower, data=data1), 1)
+plot(lm(mpg ~ horsepower, data=data1), 1)
+```
+From the plots, we can see that there is obvious heteroscedasticity if we use "mpg".So, we are going to remove "mpg" from our data set. We also remove "name", which will not appear in our future model.
+
+```{r}
+data2 <- data1[,c(-2,-10)]
+summary(data2)
+```
+
+We explore adding interactions but no higher order terms because higher order terms are hard to interprete in this case.
+
+```{r}
+fit.exh <- regsubsets(Logmpg ~.*., data2, nvmax=25, method="exhaustive")
+names(fit.exh)
+f.e <- summary(fit.exh)
+names(f.e)
+result<-data.frame(variables = (1:length(f.e$rsq)),
+           r_squared = f.e$rsq,
+           rss = f.e$rss,
+           bic = f.e$bic,
+           cp = f.e$cp)
+```
+
+#### Compare different criterion
+
+```{r}
+par(mfrow=c(3,1), mar=c(2.5,4,0.5,1), mgp=c(1.5,0.5,0))     # Compare different criteria 
+plot(f.e$cp, xlab="Number of predictors", 
+     ylab="cp", col="red", type="p", pch=16)
+plot(f.e$bic, xlab="Number of predictors", 
+     ylab="bic", col="blue", type="p", pch=16)
+plot(f.e$adjr2, xlab="Number of predictors", 
+     ylab="adjr2", col="green", type="p", pch=16)
+```
+
+According to elbow rule, we think two variables in the model are the best.
+
+Now we look for the optimal variables selected
+```{r}
+fit.exh.var <- f.e$which # logic indicators which variables are in
+colnames(fit.exh.var)[fit.exh.var[2,]]
+
+```
+```{r}
+fit.final <- lm(Logmpg ~ year + weight:year, data2) 
+summary(fit.final)
+MSE <- mean(fit.final$residuals^2)
+MSE
+```
+
+  * Describe the final model and its accuracy. Include diagnostic plots with particular focus on the model residuals.
+  
+In our final model,we use 'Logmpg' as our dependent variable and 'year','weight:year' as independent variables. All the variables are very significant in final model. The adjusted R-squared is 0.8722, which looks good. Maybe adding some other varibles can also improve accuracy a little bit but we don't think it's worthy to do so.
+
+#### Model Diagnostics
+```{r}
+par(mfrow=c(1,2), mar=c(2.5,3,1.5,1), mgp=c(1.5,0.5,0))
+plot(fit.final,1)
+plot(fit.final,2)
+```
+Although there are some outliers and the upper and lower tails of qqplot are off the line,everything is acceptable and looks reasonably fine. 
+  
+  * Summarize the effects found.
+  Year is the most influential variable to mpg. With the development of technology and science,cars bulit in earlier year is very different from those built later. Furthermore, the year effect is significantly different to cars which have different weight.
+  
+  * Predict the `mpg` of a car that is: built in 1983, in the US, red, 180 inches long, 8 cylinders, 350 displacement, 260 as horsepower, and weighs 4,000 pounds. Give a 95% CI.
+
+```{r}
+newcar <-data2[1,]
+newcar[1,] <- NA
+newcar["year"] <- 83
+newcar["cylinders"] <-8
+newcar["displacement"] <- 350
+newcar["weight"] <- 4000
+newcar["horsepower"] <- 260
+newcar["origin"] <- 1
+
+predict_log<-predict(fit.final,newcar, interval="confidence",se.fit=TRUE)
+predict<-exp(predict_log$fit)
+predict
+
+# predicted mpg is 19.2505 with a 95% confidence interval of [18.56953, 19.95645]
+
+```
+  
+  * Any suggestions as to how to improve the quality of the study?
+  They should add more variables which are related to year to the dataset. In the other word, they should know what on earth affect mpg over the time,for example,what's the specific techniques they use to build the car or the matetial each year and so on.
+
+
+## Problem 3: LASSO
+
+### Part I: EDA
+
+Crime data continuation:  We continue to use the crime data analyzed in the lectures. We first would like to visulize how crime rate (`violentcrimes.perpop`) distributes by states.  The follwoing `r`-chunk will read in the entire crime data into the `r`-path and it also creates a subset. 
+
+```{r}
+setwd("D:/upenn/STAT571/HW2")
+crime.all <- read.csv("CrimeData.csv", stringsAsFactors = F, na.strings = c("?"))
+crime <- dplyr::filter(crime.all, state %in% c("FL", "CA"))
+```
+
+Show a heatmap displaying the mean violent crime by state. You may also show a couple of your favorite summary statistics by state through the heatmaps.  Write a brief summary based on your findings.
+```{r}
+#create a new dataframe
+data.heat<- crime.all%>%
+  group_by(state)%>%
+  summarise(
+    mean.income= mean(med.income),
+    crime.rate= mean(violentcrimes.perpop,na.rm=TRUE),
+    poverty= mean(pct.pop.underpov),
+    density=mean(pop.density))
+summary(data.heat)
+
+#match the data to map
+data.heat$region <- tolower(state.name[match(data.heat$state, state.abb)])
+data.heat$center_lat <- state.center$x[match(data.heat$state, state.abb)]
+data.heat$center_long <- state.center$y[match(data.heat$state, state.abb)]
+states <- map_data("state")
+map <- merge(states,data.heat, sort=FALSE, by="region", all.x=TRUE)
+map <- map[order(map$order),]
+
+#map the mean violent crime rate
+ggplot(map,aes(x=long,y=lat,group=group))+
+  geom_polygon(aes(fill=crime.rate))+
+  geom_path()+
+  geom_text(data=data.heat,aes(x=center_lat,y=center_long,group=NA,label=state,size=2),show.legend= FALSE)+
+  scale_fill_continuous(name="Mean Violent Crime Rate",low = "#FDCACD", high = "#B23E44")
+# Because the third quartile of crime.rate is much smaller than the max, I decided not to include the limits so as to make the color contrast more obvious and readable.
+```
+
+```{r}
+#map mean income
+ggplot(map,aes(x=long,y=lat,group=group))+
+  geom_polygon(aes(fill=mean.income))+
+  geom_path()+
+  geom_text(data=data.heat,aes(x=center_lat,y=center_long,group=NA,label=state,size=2),show.legend= FALSE)+
+  scale_fill_continuous(name="Mean Medium Household Income",low = "#FDCACD", high = "#B23E44")
+```
+
+```{r}
+#map population density
+ggplot(map,aes(x=long,y=lat,group=group))+
+  geom_polygon(aes(fill=density))+
+  geom_path()+
+  geom_text(data=data.heat,aes(x=center_lat,y=center_long,group=NA,label=state,size=2),show.legend= FALSE)+
+  scale_fill_continuous(name="Mean Population Density",low = "#FDCACD", high = "#B23E44")
+```
+
+```{r}
+ggplot(map,aes(x=long,y=lat,group=group))+
+  geom_polygon(aes(fill=poverty))+
+  geom_path()+
+  geom_text(data=data.heat,aes(x=center_lat,y=center_long,group=NA,label=state,size=2),show.legend= FALSE)+
+  scale_fill_continuous(name="Mean Precent of People in Poverty",low = "#FDCACD", high = "#B23E44")
+```
+
+The crime map demonstrates the mean of violent crimes per 100K people of each state in 1995. Crime rate data of Illinois and Michigan is missing. States in the southeastern part of the country have higher violent crime rates, while states in the northern part have lower rates. More specifically, South Carolina, Louisiana, Florida, and Mariland are among the states of the highest crime rates, whereas North Dakota, Vermont, Wisconsin and Utah are among those of the lowest.
+
+The second map shows the mean income across the country. The northeastern and southwestern parts generally have higher medium household income. The population density map shows a general low density in the United States except that California, New York, and New Jersey stand out with higher density. Finally, the poverty map shows that southeastern states have higher percentages of poverty, while northern states have lower ones. In brief, the spatial patterns of violent crime rates could be similar with the patterns of poverty to an extent. Little similarity is shown among crime rate, income and density.
+
+### Part II: LASSO selection
+
+
+Our goal for the rest of the study is to find the factors that are related to violent crime. We will only use communities from two states `FL` and `CA` to assure the maximum possible number of variables. 
+
+1. Prepare a set of sensible factors/variables that you may use to build a model. You may show the R-chunk to show this step. Explain what varibles you may have excluded in the study and why? Or what other variables you have created to be included in the study. 
+
+Then use LASSO to choose a reasonable, small model. Fit an OLS model with the variables obtained. The final model should only include variables with $p$-values $< 0.05$. Note: you may choose to use "lambda 1st" or "lambda min" to answer the following questions where applicable.
+
+```{r}
+#data cleaning. Goal: no NA in dataset.
+dim(na.omit(crime)) #Can't omit all NA- no observation left
+crime%>%
+  summarise_all(funs(sum(is.na(.))))
+# Community code and police data has many NAs. We decide to exclude them.
+# We don't care about other kinds of crime in this analysis. We decide to exclude them.
+# Moreover, we exlude the variables that are calculate from others.
+var_out <- c("county","community.code", "fold","num.police","num.police.perpop","num.police.fieldops",
+             "num.police.fieldops.perpop","tot.police.requests","tot.police.requests.perpop","tot.requests.per.police",
+             "police.perpop","racialmatch.police.to.comm","pct.police.white","pct.police.black","pct.police.hisp",
+             "pct.police.asian","pct.police.minority","num.police.drugunits","number.drugtypes.seized","ave.police.ot.worked",
+              "num.policecars","police.op.budget","pct.police.onpatrol","gang.unit.deployed","num.urban","other.percap","police.op.budget.perpop","num.underpov","num.vacant.house","num.murders","num.rapes","num.robberies", "num.assaults", "num.burglaries",
+             "num.larcenies", "num.autothefts", "num.arsons","murder.perpop", "rapes.perpop","robberies.perpop",
+             "assaults.perpop","burglaries.perpop", "larcenies.perpop","autothefts.perpop", "arsons.perpop",
+             "nonviolentcrimes.perpop","pct.police.drugunits")
+
+crime.clean<- crime[!(names(crime)%in% var_out)]
+crime.clean%>%
+  summarise_all(funs(sum(is.na(.))))
+crime.clean<- na.omit(crime.clean)
+```
+
+After data cleaning, we have a dataset of 100 variables and 368 observations without NA. The first two indicate county and state, which will not enter the models.
+
+2. What is the model reported by LASSO? 
+
+```{r}
+#LASSO
+#prepare data
+names(crime.clean)
+Y<- crime.clean[,100]
+X<- model.matrix(violentcrimes.perpop~.,data=crime.clean[,3:100])[,-1]
+colnames(X)
+```
+
+```{r}
+#use cv to select lambda
+set.seed(1001)
+fit.cv<- cv.glmnet(X,Y,alpha=1,nfolds=8) #not a big fold number, because the dataset is not large.
+plot(fit.cv) 
+#lambda min
+fit.cv$lambda.min
+coef.min <- coef(fit.cv, s="lambda.min") 
+coef.min <- coef.min[which(coef.min !=0),]  
+coef.min
+#lambda first
+fit.cv$lambda.1se
+coef.1se <- coef(fit.cv, s="lambda.1se") 
+coef.1se <- coef.1se[which(coef.1se !=0),]  
+coef.1se
+```
+
+Using lambda min (87.07), the model reported by LASSo is:
+violentcrimes.perpop= 1856.449967+ 9.341510*race.pctblack- 19.285605*pct.kids2parents+ 81.518618*pct.kids.nvrmarried+ 2.940911*pct.house.vacant
+
+Using lambda first (138.6419), the model reported by LASSo is:
+violentcrimes.perpop=  1768.766553 + 6.733932*race.pctblack--17.309554*pct.kids2parents+75.092585*pct.kids.nvrmarried 
+
+We decide to adopt the lambda.min model because it already parsimonious and has smaller prediction error.
+
+3. What is the model after running OLS? Comment on the difference between the equation from questions (1) and (2) 
+```{r}
+fit.lm<- lm(violentcrimes.perpop~race.pctblack+ pct.kids2parents+ pct.kids.nvrmarried+ pct.house.vacant,data= crime.clean)
+summary(fit.lm)
+mse1= mean(fit.lm$residuals^2)
+mse1
+```
+
+The OLS model using lambda.first variables is:
+violentcrimes.perpop= 1999.426+ 13.112*race.pctblack- 22.686*pct.kids2parents+ 85.510*pct.kids.nvrmarried+ 27.754*pct.house.vacant
+
+The coefficients of the OLS model are different from the model reported by LASSO. The direction of the effect of each variable stays the same (either positive or negative). However, the absolute value of each coefficient is greater in the OLS model. This is because that LASSO estimation is biased given its minimization expression. We should use the OLS model.
+
+4. What is your final model, after excluding high $p$-value variables? 
+
+  a) What is your process of getting this final model?
+  b) Write a brief report based on your final model.
+
+```{r}
+summary(fit.lm)
+```
+
+Each variable already has a p-value smaller than 0.05. Thereore, the OLS model is the final model. This model is obtained by model selection by LASSO and OLS regression. 
+
+violentcrimes.perpop= 1999.426+ 13.112*race.pctblack- 22.686*pct.kids2parents+ 85.510*pct.kids.nvrmarried+ 27.754*pct.house.vacant
+
+Brief report:
+Using LASSO model selection and OLS modeling, we found four community-level factors related to violent crime in Florida and California in 1995. Percent of Black population, percent of kids whose parents never married, and percent of vacant houses are positively associated with violent crime rate, while percent of kids with two parents is negatively associated. 
+
+To be more specific, holding other variables constant, on average the increase of 1 percent of black population of the community results in 13.11 more crimes per 100K people; the increase of 1 percent of kids whose parents never married raises crime number by 85.5  100K people; the increase of 1 percent vacant houses lead to an increase of 27.7 crimes per 100k people; the increase of 1 percent of kids with two parents, however, reduces crimes by 22.7 per 100k people.
+
+
+### Part III: Elastic Net
+
+Now, instead of LASSO, we want to consider how changing the value of $\alpha$ (i.e. mixing between LASSO and Ridge) will affect the model. Cross-validate between $\alpha$ and $\lambda$, instead of just $\lambda$. Note that the final model may have variables with $p$-values higher than $0.05$; this is because we are optimizing for accuracy rather than parsimony. 
+
+1. What is your final elastic net model? What were the $\alpha$ and $\lambda$ values? What is the prediction error?
+```{r}
+# Goal: cross-validation using different alphas and lambdas to achieve the lowest prediction error (mean-squared error) we can.
+# try with ten alpha values: seq(0,1,0.1)
+# have a dataframe to restore alpha, MSE, lambda
+# use lambda.min because we are optimizing for accuracy
+set.seed(105)
+alpha<- seq(0,1,0.1)
+MSE<- seq(0,1,0.1)
+lambda<- seq(0,1,0.1)
+table<- data.frame(alpha,MSE,lambda)
+for(i in 0:10){
+  a= i/10
+  fit.cv.1<- cv.glmnet(X,Y,alpha=a,nfolds=8) 
+  table[i+1,2]=min(fit.cv.1$cvm)
+  table[i+1,3]=fit.cv.1$lambda.min
+}
+# plot how mse changes with alpha
+plot(table$alpha,table$MSE)
+lines(table$alpha,table$MSE)
+```
+
+```{r}
+#Therefore, we may want a model with alpha close to 0.8
+set.seed(105)
+#run a new loop
+alpha.1<- seq(0.75,0.85,0.01)
+table.1<- data.frame(alpha.1,MSE,lambda)
+for(i in 0:10){
+  a= 0.75+i/100
+  fit.cv.1<- cv.glmnet(X,Y,alpha=a,nfolds=8) 
+  table.1[i+1,2]=min(fit.cv.1$cvm)
+  table.1[i+1,3]=fit.cv.1$lambda.min
+}
+plot(table.1$alpha,table$MSE)
+lines(table.1$alpha,table$MSE)
+table.1
+```
+
+```{r}
+fit.elastic<- glmnet(X, Y, alpha=0.83,lambda = 34.351664)
+coef<- coef(fit.elastic)
+options(scipen = 999)
+coef<- coef[which(coef!=0),]
+```
+
+Therefore, we end up with alpha=0.83, lambda=lambda.min=31.29996. The prediction error MSE is 148236.0.
+The final elastic net model is:
+```{r}
+coef
+```
+
+2. Use the elastic net variables in an OLS model. What is the equation, and what is the prediction error?
+```{r}
+fit.lm.1<- lm(violentcrimes.perpop~  race.pctblack+ pct.farmself.inc+ pct.inv.inc+ asian.percap+male.pct.divorce+pct.kids2parents+pct.youngkids2parents+          pct.workmom +num.kids.nvrmarried+  pct.kids.nvrmarried+ pct.english.only+pct.house.occup+ pct.house.vacant+med.yr.house.built+pct.house.nophone+      num.in.shelters, data= crime.clean)
+summary(fit.lm.1)
+mse= mean(fit.lm.1$residuals^2)
+mse
+```
+The equation is shown above. The prediction error/ MSE is 117609.
+
+3. Summarize your findings, with particular focus on the difference between the two equations.
+There are 16 variables in the model with the least prediction error that we found. Among these variables, race.pctblack, asian.percap, male.pct.divorce, pct.workmom,pct.english.only,pct.house.occup are significant at the lavel of 0.05. Compared to the elastic net model, the OLS model has the coefficients in the same directions (positive/negative) but of greater absolute values. This is because that the elastic net coefficients are biased. We should use the OLS model.
